@@ -6,7 +6,9 @@ import '../../../shared/widgets/app_page.dart';
 import '../controller/vendas_controller.dart';
 
 class VendasScreen extends ConsumerWidget {
-  const VendasScreen({super.key});
+  final bool showBack;
+
+  const VendasScreen({super.key, this.showBack = true});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -14,30 +16,26 @@ class VendasScreen extends ConsumerWidget {
 
     return AppPage(
       title: 'Vendas',
+      showBack: showBack,
       actions: [
         IconButton(
-          onPressed: () => ref.read(vendasListProvider.notifier).refresh(),
-          icon: const Icon(Icons.refresh),
-          color: Colors.white,
+          onPressed: () => context.push('/vendas/nova'),
+          icon: const Icon(Icons.add),
         ),
       ],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/vendas/nova'),
-        child: const Icon(Icons.add),
-      ),
       child: vendasAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Erro ao carregar vendas:\n$e'),
+          child: Text('Erro ao carregar vendas: $e'),
         ),
         data: (vendas) {
           if (vendas.isEmpty) {
-            return const Center(child: Text('Nenhuma venda registrada.'));
+            return const Center(child: Text('Nenhuma venda cadastrada.'));
           }
 
           return ListView.separated(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(12),
             itemCount: vendas.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {

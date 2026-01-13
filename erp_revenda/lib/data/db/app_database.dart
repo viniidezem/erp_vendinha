@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
   static const _dbName = 'erp_revenda.db';
-  static const _dbVersion = 4; // era 3
+  static const _dbVersion = 6;
 
   Database? _db;
 
@@ -18,7 +18,7 @@ class AppDatabase {
       fullPath,
       version: _dbVersion,
       onCreate: (db, version) async {
-        // CLIENTES (novo schema)
+        // CLIENTES
         await db.execute('''
           CREATE TABLE clientes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,15 +34,70 @@ class AppDatabase {
           );
         ''');
 
-        // PRODUTOS
+        await db.execute('''
+          CREATE TABLE cliente_enderecos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            rotulo TEXT,
+            cep TEXT,
+            logradouro TEXT,
+            numero TEXT,
+            complemento TEXT,
+            bairro TEXT,
+            cidade TEXT,
+            uf TEXT,
+            principal INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
+        // FORNECEDORES
+        await db.execute('''
+          CREATE TABLE fornecedores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            telefone TEXT,
+            email TEXT,
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
+        // CATEGORIAS DINÂMICAS
+        await db.execute('''
+          CREATE TABLE categorias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,        -- 'OCASIAO' | 'FAMILIA' | 'PROPRIEDADE'
+            nome TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
+        // PRODUTOS (novo schema)
         await db.execute('''
           CREATE TABLE produtos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
-            preco_venda REAL NOT NULL,
+            ref_codigo TEXT,
+            fabricante_id INTEGER,
+            fornecedor_id INTEGER,
+            preco_custo REAL NOT NULL DEFAULT 0,
+            preco_venda REAL NOT NULL DEFAULT 0,
+            tamanho_valor REAL,
+            tamanho_unidade TEXT,      -- 'ML' | 'G' | 'UN'
+            ocasiao_id INTEGER,
+            familia_id INTEGER,
             estoque REAL NOT NULL DEFAULT 0,
             ativo INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL
+          );
+        ''');
+
+        // PRODUTO x PROPRIEDADES (N:N)
+        await db.execute('''
+          CREATE TABLE produto_propriedades (
+            produto_id INTEGER NOT NULL,
+            categoria_id INTEGER NOT NULL,
+            PRIMARY KEY (produto_id, categoria_id)
           );
         ''');
 
@@ -68,39 +123,16 @@ class AppDatabase {
           );
         ''');
 
-        // ENDEREÇOS DO CLIENTE
         await db.execute('''
-          CREATE TABLE cliente_enderecos (
+          CREATE TABLE fabricantes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cliente_id INTEGER NOT NULL,
-            rotulo TEXT,
-            cep TEXT,
-            logradouro TEXT,
-            numero TEXT,
-            complemento TEXT,
-            bairro TEXT,
-            cidade TEXT,
-            uf TEXT,
-            principal INTEGER NOT NULL DEFAULT 0,
+            nome TEXT NOT NULL,
             created_at INTEGER NOT NULL
           );
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // Se vier de versões bem antigas, garante as tabelas
-        if (oldVersion < 2) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS produtos (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              nome TEXT NOT NULL,
-              preco_venda REAL NOT NULL,
-              estoque REAL NOT NULL DEFAULT 0,
-              ativo INTEGER NOT NULL DEFAULT 1,
-              created_at INTEGER NOT NULL
-            );
-          ''');
-        }
-
+        // v3: vendas
         if (oldVersion < 3) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS vendas (
@@ -111,7 +143,6 @@ class AppDatabase {
               created_at INTEGER NOT NULL
             );
           ''');
-
           await db.execute('''
             CREATE TABLE IF NOT EXISTS venda_itens (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,8 +155,8 @@ class AppDatabase {
           ''');
         }
 
+        // v4: clientes evoluções + endereços
         if (oldVersion < 4) {
-          // Evolui tabela clientes sem perder dados
           await _addColumnIfMissing(db, 'clientes', 'apelido', 'TEXT');
           await _addColumnIfMissing(
             db,
@@ -147,7 +178,6 @@ class AppDatabase {
             'INTEGER',
           );
 
-          // Endereços
           await db.execute('''
             CREATE TABLE IF NOT EXISTS cliente_enderecos (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,6 +195,65 @@ class AppDatabase {
             );
           ''');
         }
+
+        // v5: fornecedores + categorias + produtos schema novo + produto_propriedades
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS fornecedores (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              nome TEXT NOT NULL,
+              telefone TEXT,
+              email TEXT,
+              created_at INTEGER NOT NULL
+            );
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS categorias (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tipo TEXT NOT NULL,
+              nome TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            );
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS produto_propriedades (
+              produto_id INTEGER NOT NULL,
+              categoria_id INTEGER NOT NULL,
+              PRIMARY KEY (produto_id, categoria_id)
+            );
+          ''');
+
+          // Evolução do schema de produtos (mantém o que já existe)
+          await _addColumnIfMissing(db, 'produtos', 'ref_codigo', 'TEXT');
+          await _addColumnIfMissing(db, 'produtos', 'fabricante', 'TEXT');
+          await _addColumnIfMissing(db, 'produtos', 'fornecedor_id', 'INTEGER');
+          await _addColumnIfMissing(
+            db,
+            'produtos',
+            'preco_custo',
+            'REAL NOT NULL DEFAULT 0',
+          );
+          // preco_venda já existia (mas garantimos)
+          await _addColumnIfMissing(db, 'produtos', 'tamanho_valor', 'REAL');
+          await _addColumnIfMissing(db, 'produtos', 'tamanho_unidade', 'TEXT');
+          await _addColumnIfMissing(db, 'produtos', 'ocasiao_id', 'INTEGER');
+          await _addColumnIfMissing(db, 'produtos', 'familia_id', 'INTEGER');
+        }
+
+        if (oldVersion < 6) {
+          await db.execute('''
+      CREATE TABLE IF NOT EXISTS fabricantes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    ''');
+
+          await _addColumnIfMissing(db, 'produtos', 'fabricante_id', 'INTEGER');
+          // Se você ainda tem a coluna antiga "fabricante" (texto), pode manter por enquanto.
+        }
       },
     );
 
@@ -181,7 +270,6 @@ class AppDatabase {
     final info = await db.rawQuery('PRAGMA table_info($table);');
     final exists = info.any((row) => row['name'] == column);
     if (exists) return;
-
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition;');
   }
 }

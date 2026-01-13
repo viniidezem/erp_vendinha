@@ -1,5 +1,3 @@
-//import 'package:sqflite/sqflite.dart';
-
 import '../../../data/db/app_database.dart';
 import '../../produtos/data/produto_model.dart';
 import '../../produtos/data/produto_repository.dart';
@@ -7,50 +5,124 @@ import 'venda_models.dart';
 
 class VendasRepository {
   final AppDatabase _db;
-  final ProdutoRepository _prodRepo;
+  final ProdutoRepository _produtoRepo;
 
-  VendasRepository(this._db, this._prodRepo);
+  VendasRepository(this._db, this._produtoRepo);
 
-  Future<List<Venda>> listarVendas() async {
+  /// Lista vendas registradas.
+  /// Ordena por data desc.
+  Future<List<Venda>> listarVendas({bool somenteAbertas = false}) async {
     final db = await _db.database;
-    final rows = await db.query('vendas', orderBy: 'created_at DESC');
-    return rows.map((e) => Venda.fromMap(e)).toList();
+
+    final where = somenteAbertas ? 'status = ?' : null;
+    final args = somenteAbertas ? ['ABERTA'] : null;
+
+    final rows = await db.query(
+      'vendas',
+      where: where,
+      whereArgs: args,
+      orderBy: 'created_at DESC',
+    );
+
+    return rows.map((r) => Venda.fromMap(r)).toList();
   }
 
-  Future<int> finalizarVenda({
+  /// Produtos ativos para seleção (opcionalmente somente com saldo).
+  Future<List<Produto>> listarProdutosAtivos({
+    bool somenteComSaldo = true,
+    String search = '',
+  }) {
+    return _produtoRepo.listar(
+      search: search,
+      onlyActive: true,
+      onlyWithStock: somenteComSaldo,
+    );
+  }
+
+  /// Finaliza uma venda.
+  ///
+  /// - Caso [vendaId] seja informado: atualiza a venda existente (e opcionalmente ajusta estoque).
+  /// - Caso [vendaId] seja nulo: cria a venda + grava itens + ajusta estoque.
+  ///
+  /// A tela atual usa: `finalizarVenda(clienteId: ..., itens: ...)`.
+  Future<void> finalizarVenda({
+    int? vendaId,
     int? clienteId,
-    required List<VendaItem> itens,
+    List<VendaItem>? itens,
+    double? total,
+    String status = 'FINALIZADA',
+    bool ajustarEstoque = true,
   }) async {
     final db = await _db.database;
 
-    return db.transaction<int>((txn) async {
-      final total = itens.fold<double>(0, (sum, i) => sum + i.subtotal);
+    await db.transaction((txn) async {
+      // 1) Garante vendaId (cria se necessário)
+      final int id;
+      if (vendaId == null) {
+        final computedTotal =
+            total ?? (itens?.fold<double>(0, (s, i) => s + i.subtotal) ?? 0.0);
 
-      final vendaId = await txn.insert('vendas', {
-        'cliente_id': clienteId,
-        'total': total,
-        'status': 'FINALIZADA',
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      });
+        id = await txn.insert('vendas', {
+          'cliente_id': clienteId,
+          'total': computedTotal,
+          'status': status,
+          'created_at': DateTime.now().millisecondsSinceEpoch,
+        });
+      } else {
+        id = vendaId;
 
-      // Grava itens
-      for (final item in itens) {
-        await txn.insert('venda_itens', item.toDbMap(vendaId: vendaId));
-      }
+        // Atualiza header se tiver info nova
+        final values = <String, Object?>{'status': status};
+        if (total != null) values['total'] = total;
+        if (clienteId != null) values['cliente_id'] = clienteId;
 
-      // Baixa estoque
-      for (final item in itens) {
-        await txn.rawUpdate(
-          'UPDATE produtos SET estoque = estoque - ? WHERE id = ?',
-          [item.qtd, item.produtoId],
+        await txn.update(
+          'vendas',
+          values,
+          where: 'id = ?',
+          whereArgs: [id],
         );
       }
 
-      return vendaId;
-    });
-  }
+      // 2) Se vier itens, grava itens vinculados à venda
+      if (itens != null && itens.isNotEmpty) {
+        for (final it in itens) {
+          await txn.insert(
+            'venda_itens',
+            it.toDbMap(vendaId: id),
+          );
+        }
+      }
 
-  Future<List<Produto>> listarProdutosAtivos() async {
-    return _prodRepo.listarTodos();
+      // 3) Ajusta estoque (subtrai qtd)
+      if (ajustarEstoque) {
+        // Se itens foram passados, usa eles (mais rápido).
+        // Senão, busca itens no banco.
+        final sourceItens = (itens != null)
+            ? itens
+            : (await txn.query(
+                'venda_itens',
+                columns: ['produto_id', 'qtd'],
+                where: 'venda_id = ?',
+                whereArgs: [id],
+              ))
+                .map(
+                  (r) => VendaItem(
+                    produtoId: r['produto_id'] as int,
+                    produtoNome: '',
+                    qtd: (r['qtd'] as num).toDouble(),
+                    precoUnit: 0.0,
+                  ),
+                )
+                .toList();
+
+        for (final it in sourceItens) {
+          await txn.rawUpdate(
+            'UPDATE produtos SET estoque = estoque - ? WHERE id = ?',
+            [it.qtd, it.produtoId],
+          );
+        }
+      }
+    });
   }
 }

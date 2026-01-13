@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/home/home_screen.dart';
+import '../features/home/presentation/main_shell_screen.dart';
+
 import '../features/clientes/presentation/cliente_form_screen.dart';
 import '../features/clientes/presentation/clientes_screen.dart';
 import '../features/clientes/data/cliente_model.dart';
@@ -20,7 +21,10 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      // Shell (Bottom Bar)
+      GoRoute(path: '/', builder: (context, state) => const MainShellScreen()),
+
+      // Clientes
       GoRoute(
         path: '/clientes',
         builder: (context, state) => const ClientesScreen(),
@@ -33,6 +37,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // Produtos
       GoRoute(
         path: '/produtos',
         builder: (context, state) => const ProdutosScreen(),
@@ -40,8 +45,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/produtos/form',
         builder: (context, state) {
-          final produto = state.extra as Produto?;
-          return ProdutoFormScreen(produto: produto);
+          final extra = state.extra;
+          return ProdutoFormScreen(produto: extra is Produto ? extra : null);
         },
       ),
       GoRoute(
@@ -52,22 +57,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // Vendas
       GoRoute(
         path: '/vendas',
-        builder: (context, state) => const VendasScreen(),
-      ),
-      GoRoute(
-        path: '/financeiro',
-        builder: (context, state) => const FinanceiroScreen(),
-      ),
-
-      GoRoute(
-        path: '/vendas',
-        builder: (context, state) => const VendasScreen(),
+        builder: (context, state) => const VendasScreen(showBack: true),
       ),
       GoRoute(
         path: '/vendas/nova',
         builder: (context, state) => const NovaVendaScreen(),
+      ),
+
+      // Financeiro
+      GoRoute(
+        path: '/financeiro',
+        builder: (context, state) => const FinanceiroScreen(),
       ),
     ],
   );
