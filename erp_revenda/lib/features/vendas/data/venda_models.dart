@@ -1,8 +1,25 @@
+class VendaStatus {
+  // Rascunho / carrinho em andamento (ainda não confirmado como pedido)
+  static const aberta = 'ABERTA';
+
+  // Pedido confirmado (aguardando expedição/entrega)
+  static const pedido = 'PEDIDO';
+
+  // Reservado para próxima etapa (expedição/entrega)
+  static const emExpedicao = 'EM_EXPEDICAO';
+  static const entregue = 'ENTREGUE';
+
+  // Compatibilidade com versões anteriores
+  static const finalizada = 'FINALIZADA';
+
+  static const cancelada = 'CANCELADA';
+}
+
 class Venda {
   final int? id;
   final int? clienteId;
   final double total;
-  final String status; // 'FINALIZADA' por enquanto
+  final String status; // ver VendaStatus
   final DateTime createdAt;
 
   Venda({

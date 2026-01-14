@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_gradient_button.dart';
+import '../../../shared/widgets/app_decimal_field.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../categorias/data/categoria_model.dart';
 import '../controller/produtos_controller.dart';
@@ -48,8 +49,12 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
     _nomeCtrl = TextEditingController(text: p?.nome ?? '');
     _refCtrl = TextEditingController(text: p?.refCodigo ?? '');
-    _precoCustoCtrl = TextEditingController(text: (p?.precoCusto ?? 0).toStringAsFixed(2));
-    _precoVendaCtrl = TextEditingController(text: (p?.precoVenda ?? 0).toStringAsFixed(2));
+    _precoCustoCtrl = TextEditingController(
+      text: (p?.precoCusto ?? 0).toStringAsFixed(2),
+    );
+    _precoVendaCtrl = TextEditingController(
+      text: (p?.precoVenda ?? 0).toStringAsFixed(2),
+    );
     _tamanhoCtrl = TextEditingController(
       text: p?.tamanhoValor == null ? '' : p!.tamanhoValor!.toStringAsFixed(0),
     );
@@ -75,6 +80,17 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
         if (!mounted) return;
         setState(() => _propsIds.addAll(ids));
       });
+    }
+  }
+
+  void _normalizarZeros() {
+    // Se o usuário não tocar no campo, ele fica vazio (hint). Ao salvar,
+    // garantimos que o valor padrão vire 0.00.
+    if (_precoCustoCtrl.text.trim().isEmpty) {
+      _precoCustoCtrl.text = '0.00';
+    }
+    if (_precoVendaCtrl.text.trim().isEmpty) {
+      _precoVendaCtrl.text = '0.00';
     }
   }
 
@@ -152,6 +168,8 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
   Future<void> _salvar() async {
     FocusScope.of(context).unfocus();
+
+    _normalizarZeros();
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
@@ -371,10 +389,9 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
+                            child: AppDecimalField(
                               controller: _precoCustoCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Preço de custo'),
+                              labelText: 'Preço de custo',
                               validator: (v) {
                                 final val = (v ?? '').trim();
                                 if (val.isEmpty) return 'Informe o custo';
@@ -384,10 +401,9 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextFormField(
+                            child: AppDecimalField(
                               controller: _precoVendaCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Preço de venda'),
+                              labelText: 'Preço de venda',
                               validator: (v) {
                                 final val = (v ?? '').trim();
                                 if (val.isEmpty) return 'Informe a venda';

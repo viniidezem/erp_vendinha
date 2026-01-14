@@ -15,7 +15,7 @@ class VendasRepository {
     final db = await _db.database;
 
     final where = somenteAbertas ? 'status = ?' : null;
-    final args = somenteAbertas ? ['ABERTA'] : null;
+    final args = somenteAbertas ? [VendaStatus.aberta] : null;
 
     final rows = await db.query(
       'vendas',
@@ -50,14 +50,14 @@ class VendasRepository {
     int? clienteId,
     List<VendaItem>? itens,
     double? total,
-    String status = 'FINALIZADA',
+    String status = VendaStatus.pedido,
     bool ajustarEstoque = true,
   }) async {
     final db = await _db.database;
 
     // Regra de negócio: não permitir finalizar venda sem cliente.
-    if (status == 'FINALIZADA' && vendaId == null && clienteId == null) {
-      throw ArgumentError('Selecione um cliente para finalizar a venda.');
+    if (status != VendaStatus.aberta && vendaId == null && clienteId == null) {
+      throw ArgumentError('Selecione um cliente para concluir o pedido.');
     }
 
     await db.transaction((txn) async {
@@ -137,8 +137,8 @@ class VendasRepository {
       }
 
       // 4) Atualiza a data da última compra do cliente.
-      // Regra de negócio: venda finalizada precisa estar vinculada a um cliente.
-      if (status == 'FINALIZADA') {
+      // Regra de negócio: pedidos (não-abertos) precisam estar vinculados a um cliente.
+      if (status != VendaStatus.aberta && status != VendaStatus.cancelada) {
         int? finalClienteId = clienteId;
 
         // Se não veio clienteId no parâmetro (ex.: atualização), tenta ler do header.
@@ -156,7 +156,7 @@ class VendasRepository {
         }
 
         if (finalClienteId == null) {
-          throw ArgumentError('Selecione um cliente para finalizar a venda.');
+          throw ArgumentError('Selecione um cliente para concluir o pedido.');
         }
 
         await txn.update(

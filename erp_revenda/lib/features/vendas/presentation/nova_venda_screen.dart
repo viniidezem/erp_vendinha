@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/app_gradient_button.dart';
+import '../../../shared/widgets/app_decimal_field.dart';
 import '../../produtos/data/produto_model.dart';
 import '../controller/vendas_controller.dart';
 import '../data/venda_models.dart';
@@ -32,23 +33,15 @@ class NovaVendaScreen extends ConsumerWidget {
                 subtitle: Text(
                   asyncClientes.when(
                     data: (clientes) {
-                      if (clienteSelecionadoId == null)
-                        return 'Selecione um cliente';
-                      final match = clientes.where(
-                        (c) => c.id == clienteSelecionadoId,
-                      );
-                      if (match.isEmpty)
-                        return 'Cliente #$clienteSelecionadoId';
+                      if (clienteSelecionadoId == null) return 'Selecione um cliente';
+                      final match = clientes.where((c) => c.id == clienteSelecionadoId);
+                      if (match.isEmpty) return 'Cliente #$clienteSelecionadoId';
                       final c = match.first;
                       final apelido = (c.apelido ?? '').trim();
                       return apelido.isEmpty ? c.nome : '${c.nome} ($apelido)';
                     },
-                    loading: () => clienteSelecionadoId == null
-                        ? 'Selecione um cliente'
-                        : 'Cliente #$clienteSelecionadoId',
-                    error: (_, __) => clienteSelecionadoId == null
-                        ? 'Selecione um cliente'
-                        : 'Cliente #$clienteSelecionadoId',
+                    loading: () => clienteSelecionadoId == null ? 'Selecione um cliente' : 'Cliente #$clienteSelecionadoId',
+                    error: (_, __) => clienteSelecionadoId == null ? 'Selecione um cliente' : 'Cliente #$clienteSelecionadoId',
                   ),
                 ),
                 trailing: const Icon(Icons.person_search),
@@ -62,8 +55,7 @@ class NovaVendaScreen extends ConsumerWidget {
                   );
 
                   if (result != null) {
-                    ref.read(vendaClienteSelecionadoIdProvider.notifier).state =
-                        result;
+                    ref.read(vendaClienteSelecionadoIdProvider.notifier).state = result;
                   }
                 },
               ),
@@ -106,14 +98,31 @@ class NovaVendaScreen extends ConsumerWidget {
                           subtitle: Text(
                             'Qtd: ${it.qtd.toStringAsFixed(2)} • Unit: R\$ ${it.precoUnit.toStringAsFixed(2)}',
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => ref
-                                .read(vendaEmAndamentoProvider.notifier)
-                                .removerItem(
-                                  produtoId: it.produtoId,
-                                  precoUnit: it.precoUnit,
-                                ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'Editar item',
+                                onPressed: () async {
+                                  await showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (_) => _EditarItemSheet(
+                                      item: it,
+                                      index: i,
+                                    ),
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Remover item',
+                                onPressed: () => ref
+                                    .read(vendaEmAndamentoProvider.notifier)
+                                    .removerItemAt(i),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -132,7 +141,7 @@ class NovaVendaScreen extends ConsumerWidget {
                 ),
               ),
             AppGradientButton(
-              label: 'Finalizar venda',
+              label: 'Confirmar pedido',
               trailingIcon: Icons.arrow_forward,
               onPressed: (itens.isEmpty || clienteSelecionadoId == null)
                   ? null
@@ -140,13 +149,10 @@ class NovaVendaScreen extends ConsumerWidget {
                       final repo = ref.read(vendasRepositoryProvider);
 
                       final cid = ref.read(vendaClienteSelecionadoIdProvider);
-                      await repo.finalizarVenda(clienteId: cid, itens: itens);
+                      await repo.finalizarVenda(clienteId: cid, itens: itens, status: VendaStatus.pedido);
 
                       ref.read(vendaEmAndamentoProvider.notifier).limpar();
-                      ref
-                              .read(vendaClienteSelecionadoIdProvider.notifier)
-                              .state =
-                          null;
+                      ref.read(vendaClienteSelecionadoIdProvider.notifier).state = null;
                       await ref.read(vendasListProvider.notifier).refresh();
 
                       if (context.mounted) {
@@ -161,6 +167,7 @@ class NovaVendaScreen extends ConsumerWidget {
   }
 }
 
+
 class _SelecionarClienteSheet extends ConsumerStatefulWidget {
   final int? selectedId;
   const _SelecionarClienteSheet({this.selectedId});
@@ -170,8 +177,7 @@ class _SelecionarClienteSheet extends ConsumerStatefulWidget {
       _SelecionarClienteSheetState();
 }
 
-class _SelecionarClienteSheetState
-    extends ConsumerState<_SelecionarClienteSheet> {
+class _SelecionarClienteSheetState extends ConsumerState<_SelecionarClienteSheet> {
   final _searchCtrl = TextEditingController();
 
   @override
@@ -216,10 +222,8 @@ class _SelecionarClienteSheetState
 
               Expanded(
                 child: asyncClientes.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) =>
-                      Center(child: Text('Erro ao carregar clientes: $e')),
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
                   data: (clientes) {
                     final filtrados = q.isEmpty
                         ? clientes
@@ -233,9 +237,7 @@ class _SelecionarClienteSheetState
                           }).toList();
 
                     if (filtrados.isEmpty) {
-                      return const Center(
-                        child: Text('Nenhum cliente encontrado.'),
-                      );
+                      return const Center(child: Text('Nenhum cliente encontrado.'));
                     }
 
                     return ListView.separated(
@@ -254,17 +256,13 @@ class _SelecionarClienteSheetState
                           leading: Radio<int?>(
                             value: id,
                             groupValue: widget.selectedId,
-                            onChanged: id == null
-                                ? null
-                                : (_) => Navigator.of(context).pop(id),
+                            onChanged: id == null ? null : (_) => Navigator.of(context).pop(id),
                           ),
                           title: Text(c.nome),
                           subtitle: subtitleParts.isEmpty
                               ? null
                               : Text(subtitleParts.join(' • ')),
-                          onTap: id == null
-                              ? null
-                              : () => Navigator.of(context).pop(id),
+                          onTap: id == null ? null : () => Navigator.of(context).pop(id),
                         );
                       },
                     );
@@ -274,6 +272,131 @@ class _SelecionarClienteSheetState
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+
+
+class _EditarItemSheet extends ConsumerStatefulWidget {
+  final VendaItem item;
+  final int index;
+
+  const _EditarItemSheet({
+    required this.item,
+    required this.index,
+  });
+
+  @override
+  ConsumerState<_EditarItemSheet> createState() => _EditarItemSheetState();
+}
+
+class _EditarItemSheetState extends ConsumerState<_EditarItemSheet> {
+  late final TextEditingController _qtdCtrl;
+  late final TextEditingController _precoCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _qtdCtrl = TextEditingController(text: widget.item.qtd.toStringAsFixed(2));
+    _precoCtrl =
+        TextEditingController(text: widget.item.precoUnit.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _qtdCtrl.dispose();
+    _precoCtrl.dispose();
+    super.dispose();
+  }
+
+  double _parsePtBrNumber(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return 0;
+
+    final hasComma = t.contains(',');
+    final hasDot = t.contains('.');
+
+    if (hasComma && hasDot) {
+      final cleaned = t.replaceAll('.', '').replaceAll(',', '.');
+      return double.tryParse(cleaned) ?? 0;
+    }
+
+    if (hasComma && !hasDot) {
+      return double.tryParse(t.replaceAll(',', '.')) ?? 0;
+    }
+
+    return double.tryParse(t) ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Editar item',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(widget.item.produtoNome),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _qtdCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Quantidade',
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppDecimalField(
+            controller: _precoCtrl,
+            labelText: 'Preço unitário (R\$)',
+          ),
+          
+          const SizedBox(height: 16),
+          AppGradientButton(
+            label: 'Salvar',
+            onPressed: () {
+              final qtd = _parsePtBrNumber(_qtdCtrl.text);
+              final preco = _parsePtBrNumber(_precoCtrl.text);
+
+              if (qtd <= 0 || preco < 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Informe uma quantidade válida e um preço.'),
+                  ),
+                );
+                return;
+              }
+
+              ref.read(vendaEmAndamentoProvider.notifier).atualizarItemAt(
+                    widget.index,
+                    qtd: qtd,
+                    precoUnit: preco,
+                  );
+
+              Navigator.pop(context);
+            },
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+        ],
       ),
     );
   }
@@ -294,7 +417,7 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
   final _qtdCtrl = TextEditingController(text: '1');
   final _precoCtrl = TextEditingController();
 
-  bool _somenteComSaldo = true;
+  bool _somenteComSaldo = false;
   bool _carregando = true;
   String? _erro;
   List<Produto> _produtos = const [];
@@ -446,9 +569,9 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
                     TextField(
                       controller: _buscaCtrl,
                       onChanged: (v) {
-                        setState(() {});
-                        _onSearchChanged(v);
-                      },
+                      setState(() {});
+                      _onSearchChanged(v);
+                    },
                       textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
                         labelText: 'Buscar produto',
@@ -467,7 +590,9 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
                     ),
                     const SizedBox(height: 12),
 
-                    Expanded(child: _buildListaProdutos(context)),
+                    Expanded(
+                      child: _buildListaProdutos(context),
+                    ),
 
                     const SizedBox(height: 12),
                     Row(
@@ -475,9 +600,10 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
                         Expanded(
                           child: TextFormField(
                             controller: _qtdCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
                             decoration: const InputDecoration(
                               labelText: 'Quantidade',
                             ),
@@ -485,14 +611,9 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: TextFormField(
+                          child: AppDecimalField(
                             controller: _precoCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Preço unitário',
-                            ),
+                            labelText: 'Preço unitário',
                           ),
                         ),
                       ],
@@ -515,9 +636,8 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
                 onPressed: () {
                   if (_produtoId == null) return;
 
-                  final matches = _produtos
-                      .where((p) => p.id == _produtoId)
-                      .toList();
+                  final matches =
+                      _produtos.where((p) => p.id == _produtoId).toList();
 
                   if (matches.isEmpty) {
                     // Protege contra o caso do produto “sumir” após trocar filtros.
@@ -611,7 +731,11 @@ class _AdicionarItemSheetState extends ConsumerState<_AdicionarItemSheet> {
             selected ? Icons.check_circle : Icons.circle_outlined,
             size: 20,
           ),
-          title: Text(p.nome, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(
+            p.nome,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
             '${ref.isEmpty ? '' : 'Ref: $ref  •  '}Est: $estoque',
             maxLines: 1,

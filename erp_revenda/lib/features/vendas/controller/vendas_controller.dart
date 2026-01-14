@@ -23,12 +23,11 @@ final _clienteRepoVendaProvider = Provider<ClienteRepository>((ref) {
   return ClienteRepository(ref.watch(appDatabaseProvider));
 });
 
-final clientesAtivosParaVendaProvider = FutureProvider<List<Cliente>>((
-  ref,
-) async {
+final clientesAtivosParaVendaProvider = FutureProvider<List<Cliente>>((ref) async {
   final repo = ref.watch(_clienteRepoVendaProvider);
   return repo.listar(search: '', onlyActive: true);
 });
+
 
 final vendasListProvider =
     AsyncNotifierProvider<VendasListController, List<Venda>>(
@@ -63,42 +62,84 @@ class VendaEmAndamentoController extends Notifier<List<VendaItem>> {
 
   void limpar() => state = [];
 
+  /// Regra:
+  /// - Mesmo produto + mesmo preço unitário => soma quantidade (mantém 1 linha)
+  /// - Mesmo produto + preço diferente      => cria nova linha (ex.: desconto)
   void adicionarItem(VendaItem item) {
-    // Consolida apenas se for o mesmo produto E o mesmo preço unitário
     final idx = state.indexWhere(
-      (e) =>
-          e.produtoId == item.produtoId &&
-          (e.precoUnit - item.precoUnit).abs() < _eps,
+      (e) => e.produtoId == item.produtoId && (e.precoUnit - item.precoUnit).abs() < _eps,
     );
 
     if (idx >= 0) {
       final atual = state[idx];
-
       final novo = VendaItem(
         id: atual.id,
         vendaId: atual.vendaId,
         produtoId: atual.produtoId,
         produtoNome: atual.produtoNome,
         qtd: atual.qtd + item.qtd,
-        precoUnit: atual.precoUnit, // mantém o preço (é o mesmo)
+        precoUnit: atual.precoUnit,
       );
 
       state = [...state.sublist(0, idx), novo, ...state.sublist(idx + 1)];
       return;
     }
 
-    // Preço diferente => nova linha
     state = [...state, item];
   }
 
-  void removerItem({required int produtoId, required double precoUnit}) {
-    final idx = state.indexWhere(
-      (e) => e.produtoId == produtoId && (e.precoUnit - precoUnit).abs() < _eps,
+  void removerItemAt(int index) {
+    if (index < 0 || index >= state.length) return;
+    final novo = [...state]..removeAt(index);
+    state = novo;
+  }
+
+  /// Edita quantidade e/ou preço de uma linha específica.
+  /// Se após editar ficar igual a outra linha (mesmo produto + mesmo preço),
+  /// consolida automaticamente.
+  void atualizarItemAt(int index, {double? qtd, double? precoUnit}) {
+    if (index < 0 || index >= state.length) return;
+
+    final atual = state[index];
+    final updated = VendaItem(
+      id: atual.id,
+      vendaId: atual.vendaId,
+      produtoId: atual.produtoId,
+      produtoNome: atual.produtoNome,
+      qtd: qtd ?? atual.qtd,
+      precoUnit: precoUnit ?? atual.precoUnit,
     );
 
-    if (idx < 0) return;
+    var novo = [...state];
+    novo[index] = updated;
 
-    final novo = [...state]..removeAt(idx);
+    // Consolida com outra linha se necessário
+    final dupIdx = novo.indexWhere((e) =>
+        e.produtoId == updated.produtoId &&
+        (e.precoUnit - updated.precoUnit).abs() < _eps &&
+        novo.indexOf(e) != index);
+
+    if (dupIdx >= 0) {
+      final other = novo[dupIdx];
+
+      // Mantém a linha mais "antiga" (menor índice) por estabilidade visual
+      final keep = dupIdx < index ? dupIdx : index;
+      final drop = dupIdx < index ? index : dupIdx;
+
+      final kept = novo[keep];
+      final merged = VendaItem(
+        id: kept.id,
+        vendaId: kept.vendaId,
+        produtoId: kept.produtoId,
+        produtoNome: kept.produtoNome,
+        qtd: kept.qtd + other.qtd,
+        precoUnit: kept.precoUnit,
+      );
+
+      novo[keep] = merged;
+      novo.removeAt(drop);
+    }
+
     state = novo;
   }
 }
