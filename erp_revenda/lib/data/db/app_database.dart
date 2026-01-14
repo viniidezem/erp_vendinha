@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
   static const _dbName = 'erp_revenda.db';
-  static const _dbVersion = 6;
+  static const _dbVersion = 7;
 
   Database? _db;
 
@@ -84,6 +84,7 @@ class AppDatabase {
             preco_venda REAL NOT NULL DEFAULT 0,
             tamanho_valor REAL,
             tamanho_unidade TEXT,      -- 'ML' | 'G' | 'UN'
+            tipo_id INTEGER,
             ocasiao_id INTEGER,
             familia_id INTEGER,
             estoque REAL NOT NULL DEFAULT 0,
@@ -253,6 +254,11 @@ class AppDatabase {
 
           await _addColumnIfMissing(db, 'produtos', 'fabricante_id', 'INTEGER');
           // Se você ainda tem a coluna antiga "fabricante" (texto), pode manter por enquanto.
+        }
+
+        // v7: tipo de produto (categoria) no produto
+        if (oldVersion < 7) {
+          await _addColumnIfMissing(db, 'produtos', 'tipo_id', 'INTEGER');
         }
       },
     );

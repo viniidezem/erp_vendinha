@@ -26,10 +26,47 @@ class ProdutoRepository {
 
     final term = search.trim();
     if (term.isNotEmpty) {
-      whereParts.add('(LOWER(nome) LIKE LOWER(?) OR LOWER(ref_codigo) LIKE LOWER(?))');
-      args.add('%$term%');
-      args.add('%$term%');
+      // Busca avançada:
+      // - aceita múltiplas palavras (AND)
+      // - cada termo pode bater no nome/ref do produto OU em nomes de categorias
+      //   (tipo, ocasião, família, propriedades)
+      final stopWords = <String>{
+        'categoria',
+        'categorias',
+        'cat',
+      };
+
+      final tokens = term
+          .split(RegExp(r'\s+'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .where((e) => !stopWords.contains(e.toLowerCase()))
+          .toList();
+
+      for (final t in tokens) {
+        whereParts.add(
+          '('
+          "LOWER(COALESCE(nome, '')) LIKE LOWER(?) OR "
+          "LOWER(COALESCE(ref_codigo, '')) LIKE LOWER(?) OR "
+          "EXISTS (SELECT 1 FROM categorias c WHERE c.id = produtos.tipo_id AND LOWER(c.nome) LIKE LOWER(?)) OR "
+          "EXISTS (SELECT 1 FROM categorias c WHERE c.id = produtos.ocasiao_id AND LOWER(c.nome) LIKE LOWER(?)) OR "
+          "EXISTS (SELECT 1 FROM categorias c WHERE c.id = produtos.familia_id AND LOWER(c.nome) LIKE LOWER(?)) OR "
+          "EXISTS (SELECT 1 FROM produto_propriedades pp "
+          "JOIN categorias c ON c.id = pp.categoria_id "
+          "WHERE pp.produto_id = produtos.id AND LOWER(c.nome) LIKE LOWER(?))"
+          ')',
+        );
+
+        final like = '%$t%';
+        args.add(like); // nome
+        args.add(like); // ref
+        args.add(like); // tipo
+        args.add(like); // ocasiao
+        args.add(like); // familia
+        args.add(like); // propriedades
+      }
     }
+
 
     final where = whereParts.isEmpty ? null : whereParts.join(' AND ');
 

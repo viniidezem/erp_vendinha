@@ -31,6 +31,7 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
   int? _fornecedorId;
   int? _fabricanteId;
 
+  int? _tipoId;
   int? _ocasiaoId;
   int? _familiaId;
   final Set<int> _propsIds = {};
@@ -57,6 +58,8 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
     _fornecedorId = p?.fornecedorId;
     _fabricanteId = p?.fabricanteId;
+
+    _tipoId = p?.tipoId;
 
     _ocasiaoId = p?.ocasiaoId;
     _familiaId = p?.familiaId;
@@ -140,6 +143,7 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
     ref.invalidate(categoriasPorTipoProvider(tipo));
     setState(() {
+      if (tipo == CategoriaTipo.tipoProduto) _tipoId = id;
       if (tipo == CategoriaTipo.ocasiao) _ocasiaoId = id;
       if (tipo == CategoriaTipo.familia) _familiaId = id;
       if (tipo == CategoriaTipo.propriedade) _propsIds.add(id);
@@ -170,6 +174,7 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
         precoVenda: pv,
         tamanhoValor: tamanhoValor,
         tamanhoUnidade: tamanhoValor == null ? null : _unidade,
+        tipoId: _tipoId,
         ocasiaoId: _ocasiaoId,
         familiaId: _familiaId,
         estoque: widget.produto?.estoque ?? 0,
@@ -198,6 +203,7 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
     final fornecedoresAsync = ref.watch(fornecedoresProvider);
     final fabricantesAsync = ref.watch(fabricantesProvider);
+    final tiposAsync = ref.watch(categoriasPorTipoProvider(CategoriaTipo.tipoProduto));
     final ocasioesAsync = ref.watch(categoriasPorTipoProvider(CategoriaTipo.ocasiao));
     final familiasAsync = ref.watch(categoriasPorTipoProvider(CategoriaTipo.familia));
     final propsAsync = ref.watch(categoriasPorTipoProvider(CategoriaTipo.propriedade));
@@ -447,10 +453,50 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Categorias', style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 12),
+const Text('Categorias', style: TextStyle(fontWeight: FontWeight.w700)),
+const SizedBox(height: 12),
 
-                      ocasioesAsync.when(
+tiposAsync.when(
+  loading: () => const Padding(
+    padding: EdgeInsets.all(8),
+    child: Center(child: CircularProgressIndicator()),
+  ),
+  error: (e, st) => Text('Erro tipos: $e'),
+  data: (cats) {
+    if (_tipoId != null && !cats.any((c) => c.id == _tipoId)) {
+      _tipoId = null;
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<int>(
+            initialValue: _tipoId,
+            items: [
+              const DropdownMenuItem<int>(value: null, child: Text('— Sem tipo —')),
+              ...cats.map((c) => DropdownMenuItem<int>(
+                    value: c.id!,
+                    child: Text(c.nome),
+                  )),
+            ],
+            onChanged: (id) => setState(() => _tipoId = id),
+            decoration: const InputDecoration(labelText: 'Tipo de produto'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        IconButton(
+          tooltip: 'Novo tipo',
+          onPressed: () => _criarCategoria(CategoriaTipo.tipoProduto),
+          icon: const Icon(Icons.add),
+        ),
+      ],
+    );
+  },
+),
+
+const SizedBox(height: 12),
+
+ocasioesAsync.when(
                         loading: () => const Padding(
                           padding: EdgeInsets.all(8),
                           child: Center(child: CircularProgressIndicator()),

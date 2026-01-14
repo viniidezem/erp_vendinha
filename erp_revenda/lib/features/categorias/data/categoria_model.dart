@@ -1,4 +1,5 @@
 enum CategoriaTipo {
+  tipoProduto('TIPO_PRODUTO', 'Tipo de produto'),
   ocasiao('OCASIAO', 'Ocasião'),
   familia('FAMILIA', 'Família Olfativa'),
   propriedade('PROPRIEDADE', 'Propriedades');

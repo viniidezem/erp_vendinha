@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,107 +16,104 @@ class ProdutosScreen extends ConsumerStatefulWidget {
 
 class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
   final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final current = ref.read(produtosSearchProvider);
+      _searchCtrl.text = current;
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      ref.read(produtosSearchProvider.notifier).state = v.trim();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final produtosAsync = ref.watch(produtosControllerProvider);
     final onlyActive = ref.watch(produtosSomenteAtivosProvider);
     final onlyStock = ref.watch(produtosSomenteComSaldoProvider);
+    final asyncProdutos = ref.watch(produtosControllerProvider);
 
     return AppPage(
-      title: 'Produtos / Estoque',
+      title: 'Produtos',
       actions: [
         IconButton(
-          tooltip: 'Atualizar',
-          onPressed: () =>
-              ref.read(produtosControllerProvider.notifier).refresh(),
-          icon: const Icon(Icons.refresh),
-          color: Colors.white,
+          tooltip: 'Novo produto',
+          icon: const Icon(Icons.add),
+          onPressed: () => context.push('/produtos/form'),
         ),
       ],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/produtos/form'),
-        child: const Icon(Icons.add),
-      ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Buscar por nome ou referência',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchCtrl.text.trim().isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'Limpar',
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  ref
-                                          .read(produtosSearchProvider.notifier)
-                                          .state =
-                                      '';
-                                  setState(() {});
-                                },
-                              ),
+            TextField(
+              controller: _searchCtrl,
+              onChanged: (v) {
+                _onSearchChanged(v);
+                setState(() {}); // atualiza suffixIcon
+              },
+              decoration: InputDecoration(
+                hintText: 'Buscar produtos...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpar',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          _onSearchChanged('');
+                          setState(() {});
+                        },
                       ),
-                      onChanged: (v) {
-                        ref.read(produtosSearchProvider.notifier).state = v;
-                        setState(() {});
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Somente produtos ativos'),
-                      value: onlyActive,
-                      onChanged: (v) =>
-                          ref
-                                  .read(produtosSomenteAtivosProvider.notifier)
-                                  .state =
-                              v ?? true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Somente com saldo (estoque > 0)'),
-                      value: onlyStock,
-                      onChanged: (v) =>
-                          ref
-                                  .read(
-                                    produtosSomenteComSaldoProvider.notifier,
-                                  )
-                                  .state =
-                              v ?? false,
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  ],
-                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Somente ativos'),
+                    selected: onlyActive,
+                    onSelected: (v) {
+                      ref.read(produtosSomenteAtivosProvider.notifier).state =
+                          v;
+                    },
+                  ),
+                  FilterChip(
+                    label: const Text('Somente com saldo'),
+                    selected: onlyStock,
+                    onSelected: (v) {
+                      ref.read(produtosSomenteComSaldoProvider.notifier).state =
+                          v;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Expanded(
-              child: produtosAsync.when(
+              child: asyncProdutos.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text('Erro ao carregar produtos:\n$e'),
-                ),
+                error: (e, _) =>
+                    Center(child: Text('Erro ao carregar produtos: $e')),
                 data: (produtos) {
                   if (produtos.isEmpty) {
                     return const Center(
@@ -123,26 +122,38 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.only(top: 4, bottom: 90),
                     itemCount: produtos.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, i) {
                       final p = produtos[i];
-                      final sub = <String>[];
-                      if ((p.refCodigo ?? '').trim().isNotEmpty) {
-                        sub.add('Ref: ${p.refCodigo}');
-                      }
-                      sub.add('Est: ${p.estoque.toStringAsFixed(2)}');
-                      sub.add('Venda: R\$ ${p.precoVenda.toStringAsFixed(2)}');
 
-                      return ListTile(
-                        title: Text(p.nome),
-                        subtitle: Text(sub.join(' • ')),
-                        trailing: Icon(
-                          p.ativo ? Icons.check_circle : Icons.block,
-                          size: 18,
+                      final precoVenda = 'R ${p.precoVenda.toStringAsFixed(2)}';
+                      final estoqueTxt = p.estoque.toStringAsFixed(2);
+
+                      final subtitleParts = <String>[];
+                      if ((p.refCodigo ?? '').trim().isNotEmpty) {
+                        subtitleParts.add('Ref: ${p.refCodigo}');
+                      }
+                      subtitleParts.add('Est: $estoqueTxt');
+                      subtitleParts.add('Venda: $precoVenda');
+
+                      return Card(
+                        child: ListTile(
+                          title: Text(
+                            p.nome,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            subtitleParts.join(' • '),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: p.ativo
+                              ? const Chip(label: Text('Ativo'))
+                              : const Chip(label: Text('Inativo')),
+                          onTap: () => context.push('/produtos/form', extra: p),
                         ),
-                        onTap: () => context.push('/produtos/form', extra: p),
                       );
                     },
                   );

@@ -55,6 +55,11 @@ class VendasRepository {
   }) async {
     final db = await _db.database;
 
+    // Regra de negócio: não permitir finalizar venda sem cliente.
+    if (status == 'FINALIZADA' && vendaId == null && clienteId == null) {
+      throw ArgumentError('Selecione um cliente para finalizar a venda.');
+    }
+
     await db.transaction((txn) async {
       // 1) Garante vendaId (cria se necessário)
       final int id;
@@ -73,7 +78,14 @@ class VendasRepository {
 
         // Atualiza header se tiver info nova
         final values = <String, Object?>{'status': status};
-        if (total != null) values['total'] = total;
+
+        // Se não veio total explícito, calcula a partir dos itens (quando fornecidos).
+        final computedTotal = total ??
+            (itens == null
+                ? null
+                : itens.fold<double>(0, (s, i) => s + i.subtotal));
+
+        if (computedTotal != null) values['total'] = computedTotal;
         if (clienteId != null) values['cliente_id'] = clienteId;
 
         await txn.update(
@@ -123,6 +135,39 @@ class VendasRepository {
           );
         }
       }
+
+      // 4) Atualiza a data da última compra do cliente.
+      // Regra de negócio: venda finalizada precisa estar vinculada a um cliente.
+      if (status == 'FINALIZADA') {
+        int? finalClienteId = clienteId;
+
+        // Se não veio clienteId no parâmetro (ex.: atualização), tenta ler do header.
+        if (finalClienteId == null) {
+          final rows = await txn.query(
+            'vendas',
+            columns: ['cliente_id'],
+            where: 'id = ?',
+            whereArgs: [id],
+            limit: 1,
+          );
+          if (rows.isNotEmpty) {
+            finalClienteId = rows.first['cliente_id'] as int?;
+          }
+        }
+
+        if (finalClienteId == null) {
+          throw ArgumentError('Selecione um cliente para finalizar a venda.');
+        }
+
+        await txn.update(
+          'clientes',
+          {'ultima_compra_at': DateTime.now().millisecondsSinceEpoch},
+          where: 'id = ?',
+          whereArgs: [finalClienteId],
+        );
+      }
+
+
     });
   }
 }

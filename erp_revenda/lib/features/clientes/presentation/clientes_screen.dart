@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
 import '../controller/clientes_controller.dart';
-import '../data/cliente_model.dart';
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -15,113 +16,96 @@ class ClientesScreen extends ConsumerStatefulWidget {
 
 class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // Estado inicial do campo (mantém se já havia filtro)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final current = ref.read(clientesSearchProvider);
+      _searchCtrl.text = current;
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  Color _statusBg(ClienteStatus s) {
-    switch (s) {
-      case ClienteStatus.ativo:
-        return const Color(0xFFEAF7EE);
-      case ClienteStatus.inativo:
-        return const Color(0xFFF2F4F7);
-      case ClienteStatus.bloqueado:
-        return const Color(0xFFFDECEC);
-    }
-  }
-
-  Color _statusFg(ClienteStatus s) {
-    switch (s) {
-      case ClienteStatus.ativo:
-        return const Color(0xFF2FB344);
-      case ClienteStatus.inativo:
-        return const Color(0xFF6B7280);
-      case ClienteStatus.bloqueado:
-        return const Color(0xFFE5484D);
-    }
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      ref.read(clientesSearchProvider.notifier).state = v.trim();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final clientesAsync = ref.watch(clientesControllerProvider);
     final onlyActive = ref.watch(clientesSomenteAtivosProvider);
+    final asyncClientes = ref.watch(clientesControllerProvider);
 
     return AppPage(
       title: 'Clientes',
       actions: [
         IconButton(
-          tooltip: 'Atualizar',
-          onPressed: () =>
-              ref.read(clientesControllerProvider.notifier).refresh(),
-          icon: const Icon(Icons.refresh),
-          color: Colors.white,
+          tooltip: 'Novo cliente',
+          icon: const Icon(Icons.add),
+          onPressed: () => context.push('/clientes/form'),
         ),
       ],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/clientes/form'),
-        child: const Icon(Icons.add),
-      ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Buscar por nome',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchCtrl.text.trim().isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'Limpar',
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  ref
-                                          .read(clientesSearchProvider.notifier)
-                                          .state =
-                                      '';
-                                  setState(() {});
-                                },
-                              ),
+            TextField(
+              controller: _searchCtrl,
+              onChanged: (v) {
+                _onSearchChanged(v);
+                setState(() {});
+              },
+              decoration: InputDecoration(
+                hintText: 'Buscar clientes...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpar',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          _onSearchChanged('');
+                          setState(() {});
+                        },
                       ),
-                      onChanged: (v) {
-                        ref.read(clientesSearchProvider.notifier).state = v;
-                        setState(() {}); // apenas para atualizar o suffixIcon
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Exibir somente ativos'),
-                      value: onlyActive,
-                      onChanged: (v) {
-                        ref.read(clientesSomenteAtivosProvider.notifier).state =
-                            v ?? true;
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                  ],
-                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Somente ativos'),
+                    selected: onlyActive,
+                    onSelected: (v) {
+                      ref.read(clientesSomenteAtivosProvider.notifier).state =
+                          v;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Expanded(
-              child: clientesAsync.when(
+              child: asyncClientes.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, st) => Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text('Erro ao carregar clientes:\n$e'),
-                ),
+                error: (e, _) =>
+                    Center(child: Text('Erro ao carregar clientes: $e')),
                 data: (clientes) {
                   if (clientes.isEmpty) {
                     return const Center(
@@ -130,11 +114,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.only(top: 4, bottom: 90),
                     itemCount: clientes.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final c = clientes[index];
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, i) {
+                      final c = clientes[i];
 
                       final subtitleParts = <String>[];
                       if ((c.apelido ?? '').trim().isNotEmpty) {
@@ -142,46 +125,30 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                       }
                       if ((c.telefone ?? '').trim().isNotEmpty) {
                         subtitleParts.add(
-                          c.telefoneWhatsapp
-                              ? '${c.telefone} (WhatsApp)'
-                              : c.telefone!,
+                          'Tel: ${c.telefone}${c.telefoneWhatsapp ? " (WhatsApp)" : ""}',
                         );
                       }
                       if ((c.cpf ?? '').trim().isNotEmpty) {
                         subtitleParts.add('CPF: ${c.cpf}');
                       }
 
-                      return ListTile(
-                        leading: CircleAvatar(
-                          child: Text(
-                            c.nome.isNotEmpty
-                                ? c.nome.trim()[0].toUpperCase()
-                                : '?',
+                      return Card(
+                        child: ListTile(
+                          title: Text(
+                            c.nome,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                          subtitle: subtitleParts.isEmpty
+                              ? null
+                              : Text(
+                                  subtitleParts.join(' • '),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                          trailing: Chip(label: Text(c.status.label)),
+                          onTap: () => context.push('/clientes/form', extra: c),
                         ),
-                        title: Text(c.nome),
-                        subtitle: subtitleParts.isEmpty
-                            ? null
-                            : Text(subtitleParts.join(' • ')),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _statusBg(c.status),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            c.status.label,
-                            style: TextStyle(
-                              color: _statusFg(c.status),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        onTap: () => context.push('/clientes/form', extra: c),
                       );
                     },
                   );

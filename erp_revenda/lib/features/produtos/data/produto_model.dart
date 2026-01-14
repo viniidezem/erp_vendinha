@@ -25,6 +25,8 @@ class Produto {
   final int? fabricanteId;
   final int? fornecedorId;
 
+  final int? tipoId;
+
   final double precoCusto;
   final double precoVenda;
 
@@ -44,6 +46,7 @@ class Produto {
     this.refCodigo,
     this.fabricanteId,
     this.fornecedorId,
+    this.tipoId,
     required this.precoCusto,
     required this.precoVenda,
     this.tamanhoValor,
@@ -61,6 +64,7 @@ class Produto {
     String? refCodigo,
     int? fabricanteId,
     int? fornecedorId,
+    int? tipoId,
     double? precoCusto,
     double? precoVenda,
     double? tamanhoValor,
@@ -77,6 +81,7 @@ class Produto {
       refCodigo: refCodigo ?? this.refCodigo,
       fabricanteId: fabricanteId ?? this.fabricanteId,
       fornecedorId: fornecedorId ?? this.fornecedorId,
+      tipoId: tipoId ?? this.tipoId,
       precoCusto: precoCusto ?? this.precoCusto,
       precoVenda: precoVenda ?? this.precoVenda,
       tamanhoValor: tamanhoValor ?? this.tamanhoValor,
@@ -95,6 +100,7 @@ class Produto {
         'ref_codigo': refCodigo,
         'fabricante_id': fabricanteId,
         'fornecedor_id': fornecedorId,
+        'tipo_id': tipoId,
         'preco_custo': precoCusto,
         'preco_venda': precoVenda,
         'tamanho_valor': tamanhoValor,
@@ -113,6 +119,7 @@ class Produto {
       refCodigo: map['ref_codigo'] as String?,
       fabricanteId: map['fabricante_id'] as int?,
       fornecedorId: map['fornecedor_id'] as int?,
+      tipoId: map['tipo_id'] as int?,
       precoCusto: (map['preco_custo'] as num? ?? 0).toDouble(),
       precoVenda: (map['preco_venda'] as num? ?? 0).toDouble(),
       tamanhoValor: map['tamanho_valor'] == null ? null : (map['tamanho_valor'] as num).toDouble(),
