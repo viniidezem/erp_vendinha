@@ -8,7 +8,9 @@ class CadastrosResumo {
   final int fornecedores;
   final int fabricantes;
 
-  final int categoriasTipoProduto;
+  final int formasPagamentoTotal;
+  final int formasPagamentoAtivas;
+
   final int categoriasOcasiao;
   final int categoriasFamilia;
   final int categoriasPropriedade;
@@ -20,12 +22,13 @@ class CadastrosResumo {
     required this.produtosComSaldo,
     required this.fornecedores,
     required this.fabricantes,
-    required this.categoriasTipoProduto,
+    required this.formasPagamentoTotal,
+    required this.formasPagamentoAtivas,
     required this.categoriasOcasiao,
     required this.categoriasFamilia,
     required this.categoriasPropriedade,
   });
 
   int get categoriasTotal =>
-      categoriasTipoProduto + categoriasOcasiao + categoriasFamilia + categoriasPropriedade;
+      categoriasOcasiao + categoriasFamilia + categoriasPropriedade;
 }

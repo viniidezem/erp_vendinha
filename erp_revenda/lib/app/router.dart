@@ -15,8 +15,13 @@ import '../features/produtos/data/produto_model.dart';
 import '../features/vendas/presentation/vendas_screen.dart';
 import '../features/vendas/presentation/nova_venda_screen.dart';
 import '../features/vendas/presentation/pedido_detalhe_screen.dart';
+import '../features/vendas/presentation/checkout_pedido_screen.dart';
 
 import '../features/financeiro/financeiro_screen.dart';
+
+import '../features/formas_pagamento/presentation/formas_pagamento_screen.dart';
+import '../features/formas_pagamento/presentation/forma_pagamento_form_screen.dart';
+import '../features/formas_pagamento/data/forma_pagamento_model.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -64,24 +69,41 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const VendasScreen(showBack: true),
       ),
       GoRoute(
+        path: '/pedidos/:id',
+        builder: (context, state) {
+          final idStr = state.pathParameters['id'];
+          final id = int.tryParse(idStr ?? '');
+          if (id == null) {
+            return const MainShellScreen();
+          }
+          return PedidoDetalheScreen(vendaId: id);
+        },
+      ),
+      GoRoute(
         path: '/vendas/nova',
         builder: (context, state) => const NovaVendaScreen(),
       ),
 
-
-      // Pedidos / Expedição
       GoRoute(
-        path: '/pedidos',
-        builder: (context, state) => const VendasScreen(),
+        path: '/vendas/checkout',
+        builder: (context, state) {
+          final args = state.extra as CheckoutArgs;
+          return CheckoutPedidoScreen(args: args);
+        },
+      ),
+
+      // Formas de pagamento
+      GoRoute(
+        path: '/formas-pagamento',
+        builder: (context, state) => const FormasPagamentoScreen(),
       ),
       GoRoute(
-        path: '/pedidos/:id',
+        path: '/formas-pagamento/form',
         builder: (context, state) {
-          final id = int.tryParse(state.uri.pathSegments.isNotEmpty
-              ? state.uri.pathSegments.last
-              : '') ??
-          0;
-          return PedidoDetalheScreen(vendaId: id);
+          final extra = state.extra;
+          return FormaPagamentoFormScreen(
+            forma: extra is FormaPagamento ? extra : null,
+          );
         },
       ),
 

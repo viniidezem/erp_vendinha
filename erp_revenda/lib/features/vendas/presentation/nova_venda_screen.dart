@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/app_gradient_button.dart';
@@ -8,6 +9,7 @@ import '../../../shared/widgets/app_decimal_field.dart';
 import '../../produtos/data/produto_model.dart';
 import '../controller/vendas_controller.dart';
 import '../data/venda_models.dart';
+import 'checkout_pedido_screen.dart';
 
 class NovaVendaScreen extends ConsumerWidget {
   const NovaVendaScreen({super.key});
@@ -146,16 +148,15 @@ class NovaVendaScreen extends ConsumerWidget {
               onPressed: (itens.isEmpty || clienteSelecionadoId == null)
                   ? null
                   : () async {
-                      final repo = ref.read(vendasRepositoryProvider);
-
                       final cid = ref.read(vendaClienteSelecionadoIdProvider);
-                      await repo.finalizarVenda(clienteId: cid, itens: itens, status: VendaStatus.pedido);
+                      if (cid == null) return;
 
-                      ref.read(vendaEmAndamentoProvider.notifier).limpar();
-                      ref.read(vendaClienteSelecionadoIdProvider.notifier).state = null;
-                      await ref.read(vendasListProvider.notifier).refresh();
+                      final ok = await context.push<bool>(
+                        '/vendas/checkout',
+                        extra: CheckoutArgs(clienteId: cid, itens: itens),
+                      );
 
-                      if (context.mounted) {
+                      if (ok == true && context.mounted) {
                         Navigator.of(context).pop();
                       }
                     },

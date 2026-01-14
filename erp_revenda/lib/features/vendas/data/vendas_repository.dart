@@ -49,6 +49,11 @@ class VendasRepository {
         v.total,
         v.status,
         v.created_at,
+        v.entrega_tipo,
+        v.endereco_entrega_id,
+        v.forma_pagamento_id,
+        v.parcelas,
+        v.observacao,
         c.nome AS cliente_nome
       FROM vendas v
       LEFT JOIN clientes c ON c.id = v.cliente_id
@@ -84,6 +89,12 @@ class VendasRepository {
     double? total,
     String status = VendaStatus.pedido,
     bool ajustarEstoque = true,
+    // Checkout
+    String entregaTipo = VendaEntregaTipo.entrega,
+    int? enderecoEntregaId,
+    int? formaPagamentoId,
+    int? parcelas,
+    String? observacao,
   }) async {
     final db = await _db.database;
 
@@ -119,12 +130,24 @@ class VendasRepository {
           'total': computedTotal,
           'status': status,
           'created_at': DateTime.now().millisecondsSinceEpoch,
+          'entrega_tipo': entregaTipo,
+          'endereco_entrega_id': enderecoEntregaId,
+          'forma_pagamento_id': formaPagamentoId,
+          'parcelas': parcelas,
+          'observacao': observacao,
         });
       } else {
         id = vendaId;
 
         // Atualiza header se tiver info nova
         final values = <String, Object?>{'status': status};
+
+        // Checkout (somente quando informado)
+        values['entrega_tipo'] = entregaTipo;
+        values['endereco_entrega_id'] = enderecoEntregaId;
+        values['forma_pagamento_id'] = formaPagamentoId;
+        values['parcelas'] = parcelas;
+        values['observacao'] = observacao;
 
         // Se não veio total explícito, calcula a partir dos itens (quando fornecidos).
         final computedTotal = total ?? itens?.fold<double>(0, (s, i) => s + i.subtotal);
@@ -231,6 +254,11 @@ class VendasRepository {
         v.total,
         v.status,
         v.created_at,
+        v.entrega_tipo,
+        v.endereco_entrega_id,
+        v.forma_pagamento_id,
+        v.parcelas,
+        v.observacao,
         c.nome AS cliente_nome
       FROM vendas v
       LEFT JOIN clientes c ON c.id = v.cliente_id

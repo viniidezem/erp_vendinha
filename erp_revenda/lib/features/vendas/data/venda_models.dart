@@ -1,16 +1,37 @@
+class VendaEntregaTipo {
+  static const entrega = 'ENTREGA';
+  static const retirada = 'RETIRADA';
+
+  static String label(String tipo) {
+    switch (tipo) {
+      case entrega:
+        return 'Entrega';
+      case retirada:
+        return 'Retirada / sem entrega';
+      default:
+        return tipo;
+    }
+  }
+}
+
 class VendaStatus {
   // Rascunho / carrinho em andamento (ainda não confirmado como pedido)
   static const aberta = 'ABERTA';
 
-  // Pedido confirmado (aguardando expedição/entrega)
+  // Pedido confirmado
   static const pedido = 'PEDIDO';
 
-  // Pedido aguardando reposição/chegada de mercadoria
-  static const aguardandoMercadoria = 'AGUARDANDO_MERCADORIA';
+  // Pagamento
+  static const aguardandoPagamento = 'AGUARDANDO_PAGAMENTO';
+  static const pagamentoEfetuado = 'PAGAMENTO_EFETUADO';
 
-  // Reservado para próxima etapa (expedição/entrega)
+  // Operacional / expedição
+  static const aguardandoMercadoria = 'AGUARDANDO_MERCADORIA';
   static const emExpedicao = 'EM_EXPEDICAO';
   static const entregue = 'ENTREGUE';
+
+  // Finalização
+  static const finalizado = 'FINALIZADO';
 
   // Compatibilidade com versões anteriores
   static const finalizada = 'FINALIZADA';
@@ -23,12 +44,18 @@ class VendaStatus {
         return 'Aberta';
       case pedido:
         return 'Pedido';
+      case aguardandoPagamento:
+        return 'Aguardando pagamento';
+      case pagamentoEfetuado:
+        return 'Pagamento efetuado';
       case aguardandoMercadoria:
         return 'Aguardando mercadoria';
       case emExpedicao:
         return 'Em expedição';
       case entregue:
         return 'Entregue';
+      case finalizado:
+        return 'Finalizado';
       case cancelada:
         return 'Cancelada';
       case finalizada:
@@ -38,12 +65,26 @@ class VendaStatus {
     }
   }
 
+  /// Ordem sugerida de etapas mais comuns.
+  /// Observação: não é uma regra rígida; a UI pode permitir ajustes manuais.
   static const List<String> fluxoOperacional = [
     pedido,
+    aguardandoPagamento,
+    pagamentoEfetuado,
     aguardandoMercadoria,
     emExpedicao,
     entregue,
+    finalizado,
     cancelada,
+  ];
+
+  /// Status considerados "abertos" (não concluídos).
+  static const List<String> abertos = [
+    pedido,
+    aguardandoPagamento,
+    pagamentoEfetuado,
+    aguardandoMercadoria,
+    emExpedicao,
   ];
 }
 
@@ -55,6 +96,13 @@ class Venda {
   final String status; // ver VendaStatus
   final DateTime createdAt;
 
+  // Checkout / entrega / pagamento
+  final String entregaTipo; // ver VendaEntregaTipo
+  final int? enderecoEntregaId;
+  final int? formaPagamentoId;
+  final int? parcelas;
+  final String? observacao;
+
   Venda({
     this.id,
     this.clienteId,
@@ -62,24 +110,39 @@ class Venda {
     required this.total,
     required this.status,
     required this.createdAt,
+    this.entregaTipo = VendaEntregaTipo.entrega,
+    this.enderecoEntregaId,
+    this.formaPagamentoId,
+    this.parcelas,
+    this.observacao,
   });
 
   Map<String, Object?> toMap() => {
-    'id': id,
-    'cliente_id': clienteId,
-    'total': total,
-    'status': status,
-    'created_at': createdAt.millisecondsSinceEpoch,
-  };
+        'id': id,
+        'cliente_id': clienteId,
+        'total': total,
+        'status': status,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'entrega_tipo': entregaTipo,
+        'endereco_entrega_id': enderecoEntregaId,
+        'forma_pagamento_id': formaPagamentoId,
+        'parcelas': parcelas,
+        'observacao': observacao,
+      };
 
   static Venda fromMap(Map<String, Object?> map) => Venda(
-    id: map['id'] as int?,
-    clienteId: map['cliente_id'] as int?,
-    clienteNome: map['cliente_nome'] as String?,
-    total: (map['total'] as num).toDouble(),
-    status: map['status'] as String,
-    createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
-  );
+        id: map['id'] as int?,
+        clienteId: map['cliente_id'] as int?,
+        clienteNome: map['cliente_nome'] as String?,
+        total: (map['total'] as num).toDouble(),
+        status: map['status'] as String,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+        entregaTipo: (map['entrega_tipo'] as String?) ?? VendaEntregaTipo.entrega,
+        enderecoEntregaId: map['endereco_entrega_id'] as int?,
+        formaPagamentoId: map['forma_pagamento_id'] as int?,
+        parcelas: map['parcelas'] as int?,
+        observacao: map['observacao'] as String?,
+      );
 }
 
 class VendaItem {
@@ -102,15 +165,14 @@ class VendaItem {
   double get subtotal => qtd * precoUnit;
 
   Map<String, Object?> toDbMap({required int vendaId}) => {
-    'id': id,
-    'venda_id': vendaId,
-    'produto_id': produtoId,
-    'qtd': qtd,
-    'preco_unit': precoUnit,
-    'subtotal': subtotal,
-  };
+        'id': id,
+        'venda_id': vendaId,
+        'produto_id': produtoId,
+        'qtd': qtd,
+        'preco_unit': precoUnit,
+        'subtotal': subtotal,
+      };
 }
-
 
 class VendaStatusLog {
   final int? id;
@@ -132,8 +194,7 @@ class VendaStatusLog {
         vendaId: map['venda_id'] as int,
         status: map['status'] as String,
         obs: map['obs'] as String?,
-        createdAt:
-            DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
       );
 }
 

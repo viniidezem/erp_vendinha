@@ -44,12 +44,13 @@ class CadastrosResumoRepository {
     final fabricantes =
         await count('SELECT COUNT(*) as c FROM fabricantes');
 
-    final categoriasTipoProduto = await count(
-      'SELECT COUNT(*) as c FROM categorias WHERE tipo = ?',
-      [CategoriaTipo.tipoProduto.db],
+        final formasPagamentoTotal =
+        await count('SELECT COUNT(*) as c FROM formas_pagamento');
+    final formasPagamentoAtivas = await count(
+      'SELECT COUNT(*) as c FROM formas_pagamento WHERE ativo = 1',
     );
 
-    final categoriasOcasiao = await count(
+final categoriasOcasiao = await count(
       'SELECT COUNT(*) as c FROM categorias WHERE tipo = ?',
       [CategoriaTipo.ocasiao.db],
     );
@@ -69,7 +70,8 @@ class CadastrosResumoRepository {
       produtosComSaldo: produtosComSaldo,
       fornecedores: fornecedores,
       fabricantes: fabricantes,
-      categoriasTipoProduto: categoriasTipoProduto,
+      formasPagamentoTotal: formasPagamentoTotal,
+      formasPagamentoAtivas: formasPagamentoAtivas,
       categoriasOcasiao: categoriasOcasiao,
       categoriasFamilia: categoriasFamilia,
       categoriasPropriedade: categoriasPropriedade,

@@ -75,10 +75,10 @@ class CadastrosHubScreen extends ConsumerWidget {
           _HubCard(
             icon: Icons.category_outlined,
             title: 'Categorias',
-            subtitle: 'Tipo • Ocasião • Família • Propriedades',
+            subtitle: 'Ocasião • Família • Propriedades',
             countText: resumo == null
                 ? '—'
-                : '${resumo!.categoriasTipoProduto} • ${resumo!.categoriasOcasiao} • ${resumo!.categoriasFamilia} • ${resumo!.categoriasPropriedade}',
+                : '${resumo!.categoriasOcasiao} • ${resumo!.categoriasFamilia} • ${resumo!.categoriasPropriedade}',
             onTap: () => _openSheet(context, const _CategoriasSheet()),
             onNew: () =>
                 _openSheet(context, const _CategoriasSheet(openCreate: true)),
@@ -86,7 +86,19 @@ class CadastrosHubScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           _SectionTitle('Financeiro'),
           const SizedBox(height: 12),
-          _HubCard(
+                    _HubCard(
+            icon: Icons.payments_outlined,
+            title: 'Formas de pagamento',
+            subtitle: 'Desconto • Parcelamento',
+            countText: resumo == null
+                ? '—'
+                : '${resumo!.formasPagamentoAtivas}/${resumo!.formasPagamentoTotal} ativas',
+            onTap: () => context.push('/formas-pagamento'),
+            onNew: () => context.push('/formas-pagamento/form'),
+          ),
+          const SizedBox(height: 12),
+
+_HubCard(
             icon: Icons.account_balance_wallet_outlined,
             title: 'Contas a pagar/receber',
             subtitle: 'Lançamentos e visão geral',
@@ -623,7 +635,7 @@ class _CategoriasSheetState extends ConsumerState<_CategoriasSheet>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 4, vsync: this);
+    _tab = TabController(length: 3, vsync: this);
     if (widget.openCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _openCreateDialog(_currentTipo());
@@ -640,9 +652,8 @@ class _CategoriasSheetState extends ConsumerState<_CategoriasSheet>
 
   CategoriaTipo _currentTipo() {
     return switch (_tab.index) {
-      0 => CategoriaTipo.tipoProduto,
-      1 => CategoriaTipo.ocasiao,
-      2 => CategoriaTipo.familia,
+      0 => CategoriaTipo.ocasiao,
+      1 => CategoriaTipo.familia,
       _ => CategoriaTipo.propriedade,
     };
   }
@@ -723,7 +734,6 @@ class _CategoriasSheetState extends ConsumerState<_CategoriasSheet>
           TabBar(
             controller: _tab,
             tabs: const [
-              Tab(text: 'Tipo'),
               Tab(text: 'Ocasião'),
               Tab(text: 'Família'),
               Tab(text: 'Propriedades'),
@@ -744,7 +754,6 @@ class _CategoriasSheetState extends ConsumerState<_CategoriasSheet>
             child: TabBarView(
               controller: _tab,
               children: [
-                _CategoriasLista(tipo: CategoriaTipo.tipoProduto, query: q),
                 _CategoriasLista(tipo: CategoriaTipo.ocasiao, query: q),
                 _CategoriasLista(tipo: CategoriaTipo.familia, query: q),
                 _CategoriasLista(tipo: CategoriaTipo.propriedade, query: q),
