@@ -18,6 +18,11 @@ final vendasRepositoryProvider = Provider<VendasRepository>((ref) {
 // Cliente selecionado na venda em andamento (opcional).
 final vendaClienteSelecionadoIdProvider = StateProvider<int?>((ref) => null);
 
+
+// Filtros da tela de Pedidos (lista)
+final pedidosStatusFiltroProvider = StateProvider<String?>((ref) => null); // null = todos (exceto ABERTA)
+final pedidosSearchProvider = StateProvider<String>((ref) => '');
+
 // Lista de clientes ativos para seleção na Nova Venda (não interfere nos filtros da tela de Clientes).
 final _clienteRepoVendaProvider = Provider<ClienteRepository>((ref) {
   return ClienteRepository(ref.watch(appDatabaseProvider));
@@ -39,14 +44,28 @@ class VendasListController extends AsyncNotifier<List<Venda>> {
 
   @override
   Future<List<Venda>> build() async {
-    return _repo.listarVendas();
+    final status = ref.watch(pedidosStatusFiltroProvider);
+    final search = ref.watch(pedidosSearchProvider);
+    return _repo.listarVendas(statusFiltro: status, search: search);
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = AsyncData(await _repo.listarVendas());
+    final status = ref.read(pedidosStatusFiltroProvider);
+    final search = ref.read(pedidosSearchProvider);
+    state = AsyncData(
+      await _repo.listarVendas(statusFiltro: status, search: search),
+    );
   }
 }
+
+
+// Detalhe do Pedido (inclui itens e histórico de status)
+final pedidoDetalheProvider =
+    FutureProvider.family<PedidoDetalhe, int>((ref, vendaId) async {
+  final repo = ref.watch(vendasRepositoryProvider);
+  return repo.carregarPedidoDetalhe(vendaId);
+});
 
 // Venda em andamento (estado local)
 final vendaEmAndamentoProvider =

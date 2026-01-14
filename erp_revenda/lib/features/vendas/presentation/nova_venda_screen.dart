@@ -253,16 +253,16 @@ class _SelecionarClienteSheetState extends ConsumerState<_SelecionarClienteSheet
                           subtitleParts.add(c.telefone!.trim());
                         }
                         return ListTile(
-                          leading: Radio<int?>(
-                            value: id,
-                            groupValue: widget.selectedId,
-                            onChanged: id == null ? null : (_) => Navigator.of(context).pop(id),
+                          leading: Icon(
+                            widget.selectedId == id
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
                           ),
                           title: Text(c.nome),
                           subtitle: subtitleParts.isEmpty
                               ? null
                               : Text(subtitleParts.join(' • ')),
-                          onTap: id == null ? null : () => Navigator.of(context).pop(id),
+                          onTap: () => Navigator.of(context).pop(id),
                         );
                       },
                     );

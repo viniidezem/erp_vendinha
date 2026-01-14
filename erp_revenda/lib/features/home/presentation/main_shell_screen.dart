@@ -64,7 +64,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             ),
             BottomBarItem(
               icon: Icon(Icons.receipt_long_outlined),
-              title: Text('Vendas'),
+              title: Text('Pedidos'),
               activeColor: AppColors.primary,
             ),
             BottomBarItem(

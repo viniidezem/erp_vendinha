@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
   static const _dbName = 'erp_revenda.db';
-  static const _dbVersion = 7;
+  static const _dbVersion = 8;
 
   Database? _db;
 
@@ -121,6 +121,16 @@ class AppDatabase {
             qtd REAL NOT NULL,
             preco_unit REAL NOT NULL,
             subtotal REAL NOT NULL
+          );
+        ''');
+        // HISTÓRICO DE STATUS DO PEDIDO
+        await db.execute('''
+          CREATE TABLE venda_status_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venda_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            obs TEXT,
+            created_at INTEGER NOT NULL
           );
         ''');
 
@@ -259,6 +269,19 @@ class AppDatabase {
         // v7: tipo de produto (categoria) no produto
         if (oldVersion < 7) {
           await _addColumnIfMissing(db, 'produtos', 'tipo_id', 'INTEGER');
+        }
+
+        // v8: histórico de status do pedido
+        if (oldVersion < 8) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS venda_status_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              venda_id INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              obs TEXT,
+              created_at INTEGER NOT NULL
+            );
+          ''');
         }
       },
     );

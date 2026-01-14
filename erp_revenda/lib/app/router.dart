@@ -14,6 +14,7 @@ import '../features/produtos/data/produto_model.dart';
 
 import '../features/vendas/presentation/vendas_screen.dart';
 import '../features/vendas/presentation/nova_venda_screen.dart';
+import '../features/vendas/presentation/pedido_detalhe_screen.dart';
 
 import '../features/financeiro/financeiro_screen.dart';
 
@@ -65,6 +66,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/vendas/nova',
         builder: (context, state) => const NovaVendaScreen(),
+      ),
+
+
+      // Pedidos / Expedição
+      GoRoute(
+        path: '/pedidos',
+        builder: (context, state) => const VendasScreen(),
+      ),
+      GoRoute(
+        path: '/pedidos/:id',
+        builder: (context, state) {
+          final id = int.tryParse(state.uri.pathSegments.isNotEmpty
+              ? state.uri.pathSegments.last
+              : '') ??
+          0;
+          return PedidoDetalheScreen(vendaId: id);
+        },
       ),
 
       // Financeiro
