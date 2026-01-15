@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/number_parser.dart';
+import '../../../shared/widgets/app_error_dialog.dart';
+import '../../../shared/widgets/app_decimal_field.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../clientes/controller/clientes_controller.dart';
 import '../../formas_pagamento/controller/formas_pagamento_controller.dart';
@@ -14,6 +17,8 @@ class CheckoutArgs {
 
   const CheckoutArgs({required this.clienteId, required this.itens});
 }
+
+enum _DescontoTipo { valor, percentual }
 
 class CheckoutPedidoScreen extends ConsumerStatefulWidget {
   final CheckoutArgs args;
@@ -29,16 +34,110 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
   int? _enderecoId;
   int? _formaPagamentoId;
   int _parcelas = 1;
+  bool _permiteDesconto = false;
+  bool _permiteInformarVencimento = false;
+  _DescontoTipo _descontoTipo = _DescontoTipo.valor;
+  List<DateTime?> _vencimentos = <DateTime?>[];
 
   final _obsCtrl = TextEditingController();
+  final _descontoCtrl = TextEditingController(text: '0.00');
 
   @override
   void dispose() {
     _obsCtrl.dispose();
+    _descontoCtrl.dispose();
     super.dispose();
   }
 
-  double get _total => widget.args.itens.fold<double>(0, (s, i) => s + i.subtotal);
+  double get _subtotal => widget.args.itens.fold<double>(0, (s, i) => s + i.subtotal);
+
+  double _round2(double v) => (v * 100).round() / 100.0;
+
+  double _parseDescontoInput() {
+    try {
+      return parseFlexibleNumber(_descontoCtrl.text);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  double _descontoAplicado(double total) {
+    if (!_permiteDesconto) return 0;
+    final input = _parseDescontoInput();
+    if (input <= 0) return 0;
+
+    if (_descontoTipo == _DescontoTipo.percentual) {
+      final pct = input.clamp(0.0, 100.0).toDouble();
+      final valor = _round2(total * pct / 100);
+      return valor > total ? total : valor;
+    }
+
+    final valor = input.clamp(0.0, total).toDouble();
+    return _round2(valor);
+  }
+
+  double? _descontoPercentualSelecionado() {
+    if (!_permiteDesconto || _descontoTipo != _DescontoTipo.percentual) return null;
+    final input = _parseDescontoInput();
+    if (input <= 0) return null;
+    final pct = input.clamp(0.0, 100.0).toDouble();
+    return _round2(pct);
+  }
+
+  double? _descontoValorSelecionado() {
+    if (!_permiteDesconto || _descontoTipo != _DescontoTipo.valor) return null;
+    final input = _parseDescontoInput();
+    if (input <= 0) return null;
+    return _round2(input);
+  }
+
+  String _fmtDateOnly(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year}';
+  }
+
+  List<double> _parcelasValores(double total, int parcelas) {
+    final parcelasSafe = parcelas < 1 ? 1 : parcelas;
+    final totalCents = (total * 100).round();
+    final baseCents = totalCents ~/ parcelasSafe;
+    final residual = totalCents % parcelasSafe;
+
+    return List.generate(parcelasSafe, (i) {
+      final cents = baseCents + (i == 0 ? residual : 0);
+      return cents / 100.0;
+    });
+  }
+
+  void _syncVencimentos(int parcelas) {
+    final count = parcelas < 1 ? 1 : parcelas;
+    if (!_permiteInformarVencimento) {
+      _vencimentos = List<DateTime?>.filled(count, null);
+      return;
+    }
+    if (_vencimentos.length == count) return;
+    final next = List<DateTime?>.filled(count, null);
+    final limit = _vencimentos.length < count ? _vencimentos.length : count;
+    for (var i = 0; i < limit; i++) {
+      next[i] = _vencimentos[i];
+    }
+    _vencimentos = next;
+  }
+
+  Future<void> _selecionarVencimento(int index) async {
+    final initial = (index < _vencimentos.length && _vencimentos[index] != null)
+        ? _vencimentos[index]!
+        : DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked == null || !mounted) return;
+    setState(() => _vencimentos[index] = picked);
+  }
 
   FormaPagamento? _findForma(List<FormaPagamento> list, int? id) {
     if (id == null) return null;
@@ -77,18 +176,33 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
       }
     }
 
+    final vencimentos = _permiteInformarVencimento
+        ? (_vencimentos.length == _parcelas
+            ? _vencimentos
+            : List<DateTime?>.filled(_parcelas, null))
+        : null;
     final repo = ref.read(vendasRepositoryProvider);
 
-    await repo.finalizarVenda(
-      clienteId: widget.args.clienteId,
-      itens: widget.args.itens,
-      status: VendaStatus.pedido, // regra: sempre inicia como PEDIDO
-      entregaTipo: _entregaTipo,
-      enderecoEntregaId: _entregaTipo == VendaEntregaTipo.entrega ? _enderecoId : null,
-      formaPagamentoId: _formaPagamentoId,
-      parcelas: _parcelas,
-      observacao: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
-    );
+    try {
+      await repo.finalizarVenda(
+        clienteId: widget.args.clienteId,
+        itens: widget.args.itens,
+        status: VendaStatus.pedido, // regra: sempre inicia como PEDIDO
+        entregaTipo: _entregaTipo,
+        enderecoEntregaId: _entregaTipo == VendaEntregaTipo.entrega ? _enderecoId : null,
+        formaPagamentoId: _formaPagamentoId,
+        parcelas: _parcelas,
+        vencimentos: vencimentos,
+        descontoValor: _descontoValorSelecionado(),
+        descontoPercentual: _descontoPercentualSelecionado(),
+        observacao: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
+      );
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao concluir checkout:\n$e');
+      }
+      return;
+    }
     if (!mounted) return;
 
     // Limpa estado da venda em andamento
@@ -107,6 +221,11 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
   Widget build(BuildContext context) {
     final enderecosAsync = ref.watch(clienteEnderecosProvider(widget.args.clienteId));
     final formasAsync = ref.watch(formasPagamentoControllerProvider);
+    final subtotal = _subtotal;
+    final descontoAplicado = _descontoAplicado(subtotal);
+    final totalFinal = _round2(subtotal - descontoAplicado);
+    final descontoPct = _descontoPercentualSelecionado();
+    final parcelasValores = _parcelasValores(totalFinal, _parcelas);
 
     return AppPage(
       title: 'Checkout',
@@ -127,7 +246,17 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                   const SizedBox(height: 8),
                   Text('Itens: ${widget.args.itens.length}'),
                   const SizedBox(height: 4),
-                  Text('Total: R\$ ${_total.toStringAsFixed(2)}'),
+                  Text('Subtotal: R\$ ${subtotal.toStringAsFixed(2)}'),
+                  if (descontoAplicado > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      descontoPct == null
+                          ? 'Desconto: -R\$ ${descontoAplicado.toStringAsFixed(2)}'
+                          : 'Desconto: -R\$ ${descontoAplicado.toStringAsFixed(2)} (${descontoPct.toStringAsFixed(2)}%)',
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text('Total: R\$ ${totalFinal.toStringAsFixed(2)}'),
                 ],
               ),
             ),
@@ -209,6 +338,40 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
+                    'Resumo financeiro',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Total: R\$ ${totalFinal.toStringAsFixed(2)}'),
+                  const SizedBox(height: 4),
+                  Text('Parcelas: ${_parcelas}x'),
+                  if (parcelasValores.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    for (var i = 0; i < parcelasValores.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          _permiteInformarVencimento &&
+                                  i < _vencimentos.length &&
+                                  _vencimentos[i] != null
+                              ? 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)} - vence ${_fmtDateOnly(_vencimentos[i]!)}'
+                              : 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)}',
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                     'Pagamento',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
@@ -218,6 +381,31 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                     error: (e, _) => Text('Erro ao carregar formas: $e'),
                     data: (formas) {
                       final formaSel = _findForma(formas, _formaPagamentoId);
+
+                      final permiteDesconto = formaSel?.permiteDesconto ?? false;
+                      final permiteVencimento =
+                          formaSel?.permiteInformarVencimento ?? false;
+                      if (permiteDesconto != _permiteDesconto ||
+                          permiteVencimento != _permiteInformarVencimento) {
+                        Future.microtask(() {
+                          if (!mounted) return;
+                          setState(() {
+                            _permiteDesconto = permiteDesconto;
+                            _permiteInformarVencimento = permiteVencimento;
+                            if (!permiteDesconto) {
+                              _descontoTipo = _DescontoTipo.valor;
+                              _descontoCtrl.text = '0.00';
+                            }
+                            if (!permiteVencimento) {
+                              _vencimentos =
+                                  List<DateTime?>.filled(_parcelas, null);
+                            } else {
+                              _syncVencimentos(_parcelas);
+                            }
+                          });
+                        });
+                      }
+
 
                       // Ajusta parcelas quando forma não permite
                       if (formaSel != null && !formaSel.permiteParcelamento && _parcelas != 1) {
@@ -254,6 +442,17 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                   setState(() {
                                     _formaPagamentoId = v;
                                     final fp = _findForma(formasAtivas, v);
+                                    _permiteDesconto = fp?.permiteDesconto ?? false;
+                                    _permiteInformarVencimento =
+                                        fp?.permiteInformarVencimento ?? false;
+                                    if (!_permiteDesconto) {
+                                      _descontoTipo = _DescontoTipo.valor;
+                                      _descontoCtrl.text = '0.00';
+                                    }
+                                    if (!_permiteInformarVencimento) {
+                                      _vencimentos =
+                                          List<DateTime?>.filled(_parcelas, null);
+                                    }
                                     if (fp == null || !fp.permiteParcelamento) {
                                       _parcelas = 1;
                                     } else {
@@ -261,6 +460,7 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                       if (_parcelas < 1) _parcelas = 1;
                                       if (_parcelas > max) _parcelas = max;
                                     }
+                                    _syncVencimentos(_parcelas);
                                   });
                                 },
                               ),
@@ -284,7 +484,10 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                       child: Text('${i + 1}x'),
                                     ),
                                   ),
-                                  onChanged: (v) => setState(() => _parcelas = v ?? 1),
+                                  onChanged: (v) => setState(() {
+                                    _parcelas = v ?? 1;
+                                    _syncVencimentos(_parcelas);
+                                  }),
                                 ),
                               ),
                             ),
@@ -297,6 +500,84 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                 border: OutlineInputBorder(),
                               ),
                             ),
+                          ],
+                          const SizedBox(height: 12),
+                          if (formaSel != null && formaSel.permiteDesconto) ...[
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Desconto',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Valor (R\$)'),
+                                  selected: _descontoTipo == _DescontoTipo.valor,
+                                  onSelected: (_) {
+                                    if (_descontoTipo == _DescontoTipo.valor) return;
+                                    setState(() {
+                                      _descontoTipo = _DescontoTipo.valor;
+                                      _descontoCtrl.text = '0.00';
+                                    });
+                                  },
+                                ),
+                                ChoiceChip(
+                                  label: const Text('Percentual (%)'),
+                                  selected: _descontoTipo == _DescontoTipo.percentual,
+                                  onSelected: (_) {
+                                    if (_descontoTipo == _DescontoTipo.percentual) return;
+                                    setState(() {
+                                      _descontoTipo = _DescontoTipo.percentual;
+                                      _descontoCtrl.text = '0';
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            AppDecimalField(
+                              controller: _descontoCtrl,
+                              labelText: _descontoTipo == _DescontoTipo.valor
+                                  ? 'Desconto (R\$)'
+                                  : 'Desconto (%)',
+                              zeroText: _descontoTipo == _DescontoTipo.valor ? '0.00' : '0',
+                              helperText: _descontoTipo == _DescontoTipo.valor
+                                  ? 'Informe o valor do desconto.'
+                                  : 'Informe o percentual (0 a 100).',
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ],
+                          if (formaSel != null && formaSel.permiteInformarVencimento) ...[
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Vencimento das parcelas',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            for (var i = 0; i < parcelasValores.length; i++)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)}',
+                                ),
+                                trailing: OutlinedButton(
+                                  onPressed: () => _selecionarVencimento(i),
+                                  child: Text(
+                                    (i < _vencimentos.length &&
+                                            _vencimentos[i] != null)
+                                        ? _fmtDateOnly(_vencimentos[i]!)
+                                        : 'Selecionar',
+                                  ),
+                                ),
+                              ),
                           ],
                         ],
                       );

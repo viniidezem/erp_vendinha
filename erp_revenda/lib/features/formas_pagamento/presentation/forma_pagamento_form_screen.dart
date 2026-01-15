@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../controller/formas_pagamento_controller.dart';
 import '../data/forma_pagamento_model.dart';
@@ -20,6 +21,7 @@ class _FormaPagamentoFormScreenState extends ConsumerState<FormaPagamentoFormScr
 
   bool _permiteDesconto = false;
   bool _permiteParcelamento = false;
+  bool _permiteInformarVencimento = false;
   bool _ativo = true;
 
   @override
@@ -29,6 +31,7 @@ class _FormaPagamentoFormScreenState extends ConsumerState<FormaPagamentoFormScr
     _nomeCtrl = TextEditingController(text: f?.nome ?? '');
     _permiteDesconto = f?.permiteDesconto ?? false;
     _permiteParcelamento = f?.permiteParcelamento ?? false;
+    _permiteInformarVencimento = f?.permiteInformarVencimento ?? false;
     _ativo = f?.ativo ?? true;
     if (f != null) {
       _maxParcelasCtrl.text = '${f.maxParcelas}';
@@ -60,6 +63,7 @@ class _FormaPagamentoFormScreenState extends ConsumerState<FormaPagamentoFormScr
       nome: '',
       permiteDesconto: false,
       permiteParcelamento: false,
+      permiteInformarVencimento: false,
       maxParcelas: 1,
       ativo: true,
       createdAt: now,
@@ -68,15 +72,21 @@ class _FormaPagamentoFormScreenState extends ConsumerState<FormaPagamentoFormScr
       nome: _nomeCtrl.text.trim(),
       permiteDesconto: _permiteDesconto,
       permiteParcelamento: _permiteParcelamento,
+      permiteInformarVencimento: _permiteInformarVencimento,
       maxParcelas: max,
       ativo: _ativo,
       // se for edição, mantém createdAt
       createdAt: base?.createdAt ?? now,
     );
 
-    await ref.read(formasPagamentoControllerProvider.notifier).salvar(fp);
-
-    if (mounted) Navigator.of(context).maybePop();
+    try {
+      await ref.read(formasPagamentoControllerProvider.notifier).salvar(fp);
+      if (mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar forma de pagamento:\n$e');
+      }
+    }
   }
 
   @override
@@ -121,6 +131,12 @@ class _FormaPagamentoFormScreenState extends ConsumerState<FormaPagamentoFormScr
                     }
                   });
                 },
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Permitir informar data de vencimento'),
+                value: _permiteInformarVencimento,
+                onChanged: (v) => setState(() => _permiteInformarVencimento = v),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

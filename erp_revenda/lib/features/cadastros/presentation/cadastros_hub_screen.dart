@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../app/ui/app_colors.dart';
 
@@ -336,13 +337,22 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                 final nome = nomeCtrl.text.trim();
                 if (nome.isEmpty) return;
                 final repo = ref.read(cadFornecedorRepositoryProvider);
-                await repo.inserir(
-                  nome,
-                  telefone: telCtrl.text.trim(),
-                  email: emailCtrl.text.trim(),
-                );
-                ref.invalidate(cadFornecedoresProvider);
-                ref.invalidate(cadastrosResumoProvider);
+                try {
+                  await repo.inserir(
+                    nome,
+                    telefone: telCtrl.text.trim(),
+                    email: emailCtrl.text.trim(),
+                  );
+                  ref.invalidate(cadFornecedoresProvider);
+                  ref.invalidate(cadastrosResumoProvider);
+                } catch (e) {
+                  if (!mounted) return;
+                  await showErrorDialog(
+                    context,
+                    'Erro ao salvar fornecedor:\n$e',
+                  );
+                  return;
+                }
                 if (!mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -508,9 +518,18 @@ class _FabricantesSheetState extends ConsumerState<_FabricantesSheet> {
                 final nome = nomeCtrl.text.trim();
                 if (nome.isEmpty) return;
                 final repo = ref.read(cadFabricanteRepositoryProvider);
-                await repo.inserir(nome);
-                ref.invalidate(cadFabricantesProvider);
-                ref.invalidate(cadastrosResumoProvider);
+                try {
+                  await repo.inserir(nome);
+                  ref.invalidate(cadFabricantesProvider);
+                  ref.invalidate(cadastrosResumoProvider);
+                } catch (e) {
+                  if (!mounted) return;
+                  await showErrorDialog(
+                    context,
+                    'Erro ao salvar fabricante:\n$e',
+                  );
+                  return;
+                }
                 if (!mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -680,9 +699,18 @@ class _CategoriasSheetState extends ConsumerState<_CategoriasSheet>
                 final nome = nomeCtrl.text.trim();
                 if (nome.isEmpty) return;
                 final repo = ref.read(cadCategoriaRepositoryProvider);
-                await repo.inserir(tipo, nome);
-                ref.invalidate(cadCategoriasPorTipoProvider(tipo));
-                ref.invalidate(cadastrosResumoProvider);
+                try {
+                  await repo.inserir(tipo, nome);
+                  ref.invalidate(cadCategoriasPorTipoProvider(tipo));
+                  ref.invalidate(cadastrosResumoProvider);
+                } catch (e) {
+                  if (!mounted) return;
+                  await showErrorDialog(
+                    context,
+                    'Erro ao salvar categoria:\n$e',
+                  );
+                  return;
+                }
                 if (!mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(

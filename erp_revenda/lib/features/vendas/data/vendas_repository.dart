@@ -49,6 +49,8 @@ class VendasRepository {
         v.total,
         v.status,
         v.created_at,
+        v.desconto_valor,
+        v.desconto_percentual,
         v.entrega_tipo,
         v.endereco_entrega_id,
         v.forma_pagamento_id,
@@ -87,6 +89,9 @@ class VendasRepository {
     int? clienteId,
     List<VendaItem>? itens,
     double? total,
+    double? descontoValor,
+    double? descontoPercentual,
+    List<DateTime?>? vencimentos,
     String status = VendaStatus.pedido,
     bool ajustarEstoque = true,
     // Checkout
@@ -98,13 +103,13 @@ class VendasRepository {
   }) async {
     final db = await _db.database;
 
-    // Regra de negócio: não permitir finalizar venda sem cliente.
+    // Regra de negocio: nao permitir finalizar venda sem cliente.
     if (status != VendaStatus.aberta && vendaId == null && clienteId == null) {
       throw ArgumentError('Selecione um cliente para concluir o pedido.');
     }
 
     await db.transaction((txn) async {
-      // Para logar mudanças de status (histórico do pedido)
+      // Para logar mudancas de status (historico do pedido)
       String? previousStatus;
       if (vendaId != null) {
         final prev = await txn.query(
@@ -119,17 +124,29 @@ class VendasRepository {
         }
       }
 
-      // 1) Garante vendaId (cria se necessário)
+      final createdAtMs = DateTime.now().millisecondsSinceEpoch;
+      final computedTotal = total ?? itens?.fold<double>(0, (s, i) => s + i.subtotal);
+      final hasTotal = computedTotal != null;
+      final totalBase = computedTotal ?? 0.0;
+      final descontoAplicado = hasTotal
+          ? _calcularDesconto(
+              totalBase,
+              descontoValor: descontoValor,
+              descontoPercentual: descontoPercentual,
+            )
+          : 0.0;
+      final totalFinal = hasTotal ? _round2(totalBase - descontoAplicado) : 0.0;
+
+      // 1) Garante vendaId (cria se necessario)
       final int id;
       if (vendaId == null) {
-        final computedTotal =
-            total ?? (itens?.fold<double>(0, (s, i) => s + i.subtotal) ?? 0.0);
-
         id = await txn.insert('vendas', {
           'cliente_id': clienteId,
-          'total': computedTotal,
+          'total': totalFinal,
           'status': status,
-          'created_at': DateTime.now().millisecondsSinceEpoch,
+          'created_at': createdAtMs,
+          'desconto_valor': descontoAplicado,
+          'desconto_percentual': _descontoPercentualDb(descontoPercentual),
           'entrega_tipo': entregaTipo,
           'endereco_entrega_id': enderecoEntregaId,
           'forma_pagamento_id': formaPagamentoId,
@@ -148,11 +165,12 @@ class VendasRepository {
         values['forma_pagamento_id'] = formaPagamentoId;
         values['parcelas'] = parcelas;
         values['observacao'] = observacao;
+        if (hasTotal) {
+          values['total'] = totalFinal;
+          values['desconto_valor'] = descontoAplicado;
+          values['desconto_percentual'] = _descontoPercentualDb(descontoPercentual);
+        }
 
-        // Se não veio total explícito, calcula a partir dos itens (quando fornecidos).
-        final computedTotal = total ?? itens?.fold<double>(0, (s, i) => s + i.subtotal);
-
-        if (computedTotal != null) values['total'] = computedTotal;
         if (clienteId != null) values['cliente_id'] = clienteId;
 
         await txn.update(
@@ -163,7 +181,7 @@ class VendasRepository {
         );
       }
 
-      // 2) Se vier itens, grava itens vinculados à venda
+      // 2) Se vier itens, grava itens vinculados a venda
       if (itens != null && itens.isNotEmpty) {
         for (final it in itens) {
           await txn.insert(
@@ -173,15 +191,27 @@ class VendasRepository {
         }
       }
 
-            // 2.5) Histórico de status (apenas quando muda)
+      // 2.5) Historico de status (apenas quando muda)
       if (previousStatus != status) {
         await _insertStatusLog(txn, vendaId: id, status: status);
       }
 
-// 3) Ajusta estoque (subtrai qtd)
+      // 2.6) Contas a receber (apenas para novos pedidos)
+      if (vendaId == null && status != VendaStatus.aberta && totalFinal > 0) {
+        await _gerarContasReceber(
+          txn,
+          vendaId: id,
+          total: totalFinal,
+          parcelas: parcelas ?? 1,
+          vencimentos: vencimentos,
+          createdAtMs: createdAtMs,
+        );
+      }
+
+      // 3) Ajusta estoque (subtrai qtd)
       if (ajustarEstoque) {
-        // Se itens foram passados, usa eles (mais rápido).
-        // Senão, busca itens no banco.
+        // Se itens foram passados, usa eles (mais rapido).
+        // Senao, busca itens no banco.
         final sourceItens = (itens != null)
             ? itens
             : (await txn.query(
@@ -208,12 +238,12 @@ class VendasRepository {
         }
       }
 
-      // 4) Atualiza a data da última compra do cliente.
-      // Regra de negócio: pedidos (não-abertos) precisam estar vinculados a um cliente.
+      // 4) Atualiza a data da ultima compra do cliente.
+      // Regra de negocio: pedidos (nao-abertos) precisam estar vinculados a um cliente.
       if (status != VendaStatus.aberta && status != VendaStatus.cancelada) {
         int? finalClienteId = clienteId;
 
-        // Se não veio clienteId no parâmetro (ex.: atualização), tenta ler do header.
+        // Se nao veio clienteId no parametro (ex.: atualizacao), tenta ler do header.
         if (finalClienteId == null) {
           final rows = await txn.query(
             'vendas',
@@ -238,8 +268,6 @@ class VendasRepository {
           whereArgs: [finalClienteId],
         );
       }
-
-
     });
   }
 
@@ -254,6 +282,8 @@ class VendasRepository {
         v.total,
         v.status,
         v.created_at,
+        v.desconto_valor,
+        v.desconto_percentual,
         v.entrega_tipo,
         v.endereco_entrega_id,
         v.forma_pagamento_id,
@@ -314,7 +344,7 @@ class VendasRepository {
       'venda_status_log',
       where: 'venda_id = ?',
       whereArgs: [vendaId],
-      orderBy: 'created_at DESC, id DESC',
+      orderBy: 'created_at ASC, id ASC',
     );
     return rows.map((r) => VendaStatusLog.fromMap(r)).toList();
   }
@@ -367,6 +397,64 @@ class VendasRepository {
       'obs': obs,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  static double _round2(double v) => (v * 100).round() / 100.0;
+
+  static double _calcularDesconto(
+    double total, {
+    double? descontoValor,
+    double? descontoPercentual,
+  }) {
+    final pct = (descontoPercentual ?? 0);
+    if (pct > 0) {
+      final pctClamped = pct.clamp(0.0, 100.0).toDouble();
+      final valor = _round2(total * pctClamped / 100);
+      return valor > total ? total : valor;
+    }
+
+    final valor = (descontoValor ?? 0);
+    if (valor <= 0) return 0;
+
+    final valorClamped = valor.clamp(0.0, total).toDouble();
+    return _round2(valorClamped);
+  }
+
+  static double? _descontoPercentualDb(double? descontoPercentual) {
+    if (descontoPercentual == null || descontoPercentual <= 0) return null;
+    final pct = descontoPercentual.clamp(0.0, 100.0).toDouble();
+    return _round2(pct);
+  }
+
+  static Future<void> _gerarContasReceber(
+    dynamic txn, {
+    required int vendaId,
+    required double total,
+    required int parcelas,
+    List<DateTime?>? vencimentos,
+    required int createdAtMs,
+  }) async {
+    final totalCents = (total * 100).round();
+    final parcelasSafe = parcelas < 1 ? 1 : parcelas;
+    final baseCents = totalCents ~/ parcelasSafe;
+    final residual = totalCents % parcelasSafe;
+
+    for (var i = 1; i <= parcelasSafe; i++) {
+      final cents = baseCents + (i == 1 ? residual : 0);
+      final valor = cents / 100.0;
+      final vencimento = (vencimentos != null && (i - 1) < vencimentos.length)
+          ? vencimentos[i - 1]
+          : null;
+      await txn.insert('contas_receber', {
+        'venda_id': vendaId,
+        'parcela_numero': i,
+        'parcelas_total': parcelasSafe,
+        'valor': valor,
+        'status': 'ABERTA',
+        'vencimento_at': vencimento?.millisecondsSinceEpoch,
+        'created_at': createdAtMs,
+      });
+    }
   }
 
 }

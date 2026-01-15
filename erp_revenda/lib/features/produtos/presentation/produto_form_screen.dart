@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_gradient_button.dart';
 import '../../../shared/widgets/app_decimal_field.dart';
 import '../../../shared/widgets/app_page.dart';
@@ -210,6 +211,10 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
 
       if (!mounted) return;
       context.pop();
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar produto:\n$e');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -699,6 +704,10 @@ class _NovoFornecedorDialogState extends ConsumerState<_NovoFornecedorDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(id);
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar fornecedor:\n$e');
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -772,6 +781,10 @@ class _NovoFabricanteDialogState extends ConsumerState<_NovoFabricanteDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(id);
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar fabricante:\n$e');
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -829,6 +842,10 @@ class _NovaCategoriaDialogState extends ConsumerState<_NovaCategoriaDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(id);
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar categoria:\n$e');
+      }
     } finally {
       if (mounted) setState(() => saving = false);
     }

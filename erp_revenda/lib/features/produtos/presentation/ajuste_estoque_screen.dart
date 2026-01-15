@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/app_gradient_button.dart';
 import '../controller/produtos_controller.dart';
@@ -61,6 +62,10 @@ class _AjusteEstoqueScreenState extends ConsumerState<AjusteEstoqueScreen> {
 
       if (mounted) {
         Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao ajustar estoque:\n$e');
       }
     } finally {
       if (mounted) {

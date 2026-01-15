@@ -102,6 +102,8 @@ class Venda {
   final DateTime createdAt;
 
   // Checkout / entrega / pagamento
+  final double descontoValor;
+  final double? descontoPercentual;
   final String entregaTipo; // ver VendaEntregaTipo
   final int? enderecoEntregaId;
   final int? formaPagamentoId;
@@ -115,6 +117,8 @@ class Venda {
     required this.total,
     required this.status,
     required this.createdAt,
+    this.descontoValor = 0,
+    this.descontoPercentual,
     this.entregaTipo = VendaEntregaTipo.entrega,
     this.enderecoEntregaId,
     this.formaPagamentoId,
@@ -128,6 +132,8 @@ class Venda {
         'total': total,
         'status': status,
         'created_at': createdAt.millisecondsSinceEpoch,
+        'desconto_valor': descontoValor,
+        'desconto_percentual': descontoPercentual,
         'entrega_tipo': entregaTipo,
         'endereco_entrega_id': enderecoEntregaId,
         'forma_pagamento_id': formaPagamentoId,
@@ -142,6 +148,8 @@ class Venda {
         total: (map['total'] as num).toDouble(),
         status: map['status'] as String,
         createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+        descontoValor: (map['desconto_valor'] as num? ?? 0).toDouble(),
+        descontoPercentual: (map['desconto_percentual'] as num?)?.toDouble(),
         entregaTipo: (map['entrega_tipo'] as String?) ?? VendaEntregaTipo.entrega,
         enderecoEntregaId: map['endereco_entrega_id'] as int?,
         formaPagamentoId: map['forma_pagamento_id'] as int?,

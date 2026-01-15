@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/app_gradient_button.dart';
 import '../controller/clientes_controller.dart';
@@ -104,6 +105,10 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
       }
 
       if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        await showErrorDialog(context, 'Erro ao salvar cliente:\n$e');
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -307,10 +312,19 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                                       final repo = ref.read(
                                         clienteEnderecoRepositoryProvider,
                                       );
-                                      await repo.inserir(novo);
-                                      ref.invalidate(
-                                        clienteEnderecosProvider(clienteId),
-                                      );
+                                      try {
+                                        await repo.inserir(novo);
+                                        ref.invalidate(
+                                          clienteEnderecosProvider(clienteId),
+                                        );
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          await showErrorDialog(
+                                            context,
+                                            'Erro ao salvar endereço:\n$e',
+                                          );
+                                        }
+                                      }
                                     }
                                   },
                             icon: const Icon(Icons.add),
@@ -394,8 +408,17 @@ class _EnderecosList extends ConsumerWidget {
                       _EnderecoSheet(clienteId: clienteId, endereco: e),
                 );
                 if (atualizado != null) {
-                  await repo.atualizar(atualizado);
-                  ref.invalidate(clienteEnderecosProvider(clienteId));
+                  try {
+                    await repo.atualizar(atualizado);
+                    ref.invalidate(clienteEnderecosProvider(clienteId));
+                  } catch (e) {
+                    if (context.mounted) {
+                      await showErrorDialog(
+                        context,
+                        'Erro ao atualizar endere?o:\n$e',
+                      );
+                    }
+                  }
                 }
               },
               trailing: IconButton(
@@ -421,8 +444,17 @@ class _EnderecosList extends ConsumerWidget {
                   );
 
                   if (ok == true) {
-                    await repo.remover(e.id!);
-                    ref.invalidate(clienteEnderecosProvider(clienteId));
+                    try {
+                      await repo.remover(e.id!);
+                      ref.invalidate(clienteEnderecosProvider(clienteId));
+                    } catch (err) {
+                      if (context.mounted) {
+                        await showErrorDialog(
+                          context,
+                          'Erro ao remover endere?o:\n$err',
+                        );
+                      }
+                    }
                   }
                 },
               ),

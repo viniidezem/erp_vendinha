@@ -62,6 +62,7 @@ class PedidoDetalheScreen extends ConsumerWidget {
     );
 
     if (selected == null || selected == atual) return;
+    if (!context.mounted) return;
 
     await _mudarStatus(context, ref, novoStatus: selected);
   }
@@ -370,7 +371,7 @@ class PedidoDetalheScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         if (detalhe.historico.isEmpty)
-                          const Text('Sem hist??rico registrado.')
+                          const Text('Sem historico registrado.')
                         else
                           ...detalhe.historico.asMap().entries.map((entry) {
                             final h = entry.value;
@@ -380,6 +381,7 @@ class PedidoDetalheScreen extends ConsumerWidget {
                               dateText: _fmtDate(h.createdAt),
                               obs: h.obs,
                               isLast: isLast,
+                              isCurrent: isLast,
                               color: _statusColor(h.status),
                             );
                           }),
@@ -437,6 +439,7 @@ class _TimelineItem extends StatelessWidget {
   final String dateText;
   final String? obs;
   final bool isLast;
+  final bool isCurrent;
   final Color color;
 
   const _TimelineItem({
@@ -444,6 +447,7 @@ class _TimelineItem extends StatelessWidget {
     required this.dateText,
     required this.obs,
     required this.isLast,
+    required this.isCurrent,
     required this.color,
   });
 
@@ -472,14 +476,42 @@ class _TimelineItem extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isCurrent ? color.withValues(alpha: 0.08) : null,
+              borderRadius: BorderRadius.circular(12),
+              border: isCurrent ? Border.all(color: color.withValues(alpha: 0.35)) : null,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  VendaStatus.label(status),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        VendaStatus.label(status),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (isCurrent)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'Atual',
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(

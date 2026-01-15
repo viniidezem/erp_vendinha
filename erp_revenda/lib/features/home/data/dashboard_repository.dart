@@ -17,7 +17,8 @@ class DashboardRepository {
         COALESCE(SUM(total), 0) AS total,
         COUNT(*) AS qtd
       FROM vendas
-      WHERE date(datetime(created_at / 1000, 'unixepoch', 'localtime')) = date('now', 'localtime');
+      WHERE date(datetime(created_at / 1000, 'unixepoch', 'localtime')) = date('now', 'localtime')
+        AND status NOT IN ('ABERTA', 'CANCELADA');
     ''');
     final vendasHojeTotal = (vendasHojeRows.first['total'] as num? ?? 0).toDouble();
     final vendasHojeQtde = (vendasHojeRows.first['qtd'] as int? ?? 0);
@@ -29,7 +30,8 @@ class DashboardRepository {
         COUNT(*) AS qtd
       FROM vendas
       WHERE strftime('%Y-%m', datetime(created_at / 1000, 'unixepoch', 'localtime')) =
-            strftime('%Y-%m', 'now', 'localtime');
+            strftime('%Y-%m', 'now', 'localtime')
+        AND status NOT IN ('ABERTA', 'CANCELADA');
     ''');
     final vendasMesTotal = (vendasMesRows.first['total'] as num? ?? 0).toDouble();
     final vendasMesQtde = (vendasMesRows.first['qtd'] as int? ?? 0);

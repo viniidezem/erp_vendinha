@@ -5,7 +5,7 @@ class AppDatabase {
   static const _dbName = 'erp_revenda.db';
   // v9: garante colunas de checkout em bases já "inconsistentes" (ex.: DB marcado como v7/v8
   // mas tabela vendas ainda sem entrega_tipo/forma_pagamento_id/etc.).
-  static const _dbVersion = 9;
+  static const _dbVersion = 12;
 
   Database? _db;
 
@@ -23,6 +23,9 @@ class AppDatabase {
         // Defesa extra: mesmo que a versão do DB já esteja alta, pode existir base "inconsistente"
         // (ex.: criada em builds anteriores sem todas as colunas). Garantimos o schema mínimo.
         await _ensureCheckoutSchema(db);
+        await _ensureStatusLogData(db);
+        await _ensureFinanceiroSchema(db);
+        await _ensureProdutosSchema(db);
       },
       onCreate: (db, version) async {
         // CLIENTES
@@ -87,6 +90,7 @@ class AppDatabase {
             ref_codigo TEXT,
             fabricante_id INTEGER,
             fornecedor_id INTEGER,
+            tipo_id INTEGER,
             preco_custo REAL NOT NULL DEFAULT 0,
             preco_venda REAL NOT NULL DEFAULT 0,
             tamanho_valor REAL,
@@ -116,6 +120,8 @@ class AppDatabase {
             total REAL NOT NULL,
             status TEXT NOT NULL,
             created_at INTEGER NOT NULL,
+            desconto_valor REAL NOT NULL DEFAULT 0,
+            desconto_percentual REAL,
             entrega_tipo TEXT NOT NULL DEFAULT 'ENTREGA', -- 'ENTREGA' | 'RETIRADA'
             endereco_entrega_id INTEGER,
             forma_pagamento_id INTEGER,
@@ -145,6 +151,18 @@ class AppDatabase {
           );
         ''');
 
+        await db.execute('''
+          CREATE TABLE contas_receber (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venda_id INTEGER NOT NULL,
+            parcela_numero INTEGER NOT NULL,
+            parcelas_total INTEGER NOT NULL,
+            valor REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ABERTA',
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
         // FORMAS DE PAGAMENTO
         await db.execute('''
           CREATE TABLE formas_pagamento (
@@ -152,6 +170,7 @@ class AppDatabase {
             nome TEXT NOT NULL,
             permite_desconto INTEGER NOT NULL DEFAULT 0,
             permite_parcelamento INTEGER NOT NULL DEFAULT 0,
+        permite_vencimento INTEGER NOT NULL DEFAULT 0,
             max_parcelas INTEGER NOT NULL DEFAULT 1,
             ativo INTEGER NOT NULL DEFAULT 1,
             created_at INTEGER NOT NULL
@@ -298,6 +317,7 @@ class AppDatabase {
               nome TEXT NOT NULL,
               permite_desconto INTEGER NOT NULL DEFAULT 0,
               permite_parcelamento INTEGER NOT NULL DEFAULT 0,
+        permite_vencimento INTEGER NOT NULL DEFAULT 0,
               max_parcelas INTEGER NOT NULL DEFAULT 1,
               ativo INTEGER NOT NULL DEFAULT 1,
               created_at INTEGER NOT NULL
@@ -345,6 +365,13 @@ class AppDatabase {
         if (oldVersion < 9) {
           await _ensureCheckoutSchema(db);
         }
+
+        if (oldVersion < 11) {
+          await _ensureFinanceiroSchema(db);
+        }
+        if (oldVersion < 12) {
+          await _ensureProdutosSchema(db);
+        }
       },
     );
 
@@ -383,6 +410,7 @@ class AppDatabase {
         nome TEXT NOT NULL,
         permite_desconto INTEGER NOT NULL DEFAULT 0,
         permite_parcelamento INTEGER NOT NULL DEFAULT 0,
+        permite_vencimento INTEGER NOT NULL DEFAULT 0,
         max_parcelas INTEGER NOT NULL DEFAULT 1,
         ativo INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL
@@ -400,6 +428,79 @@ class AppDatabase {
     ''');
 
     await _seedFormasPagamento(db);
+  }
+
+  static Future<void> _ensureStatusLogData(Database db) async {
+    final rows = await db.rawQuery('''
+      SELECT v.id, v.status, v.created_at
+      FROM vendas v
+      LEFT JOIN venda_status_log l ON l.venda_id = v.id
+      WHERE l.id IS NULL
+        AND v.status IS NOT NULL
+        AND v.status <> 'ABERTA'
+    ''');
+
+    if (rows.isEmpty) return;
+
+    final batch = db.batch();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+
+      final status = (row['status'] as String?) ?? 'PEDIDO';
+      final createdAt = (row['created_at'] as int?) ?? now;
+
+      batch.insert('venda_status_log', {
+        'venda_id': id,
+        'status': status,
+        'obs': null,
+        'created_at': createdAt,
+      });
+    }
+
+    await batch.commit(noResult: true);
+  }
+
+  static Future<void> _ensureFinanceiroSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS contas_receber (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venda_id INTEGER NOT NULL,
+        parcela_numero INTEGER NOT NULL,
+        parcelas_total INTEGER NOT NULL,
+        valor REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ABERTA',
+        vencimento_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+    ''');
+
+    await _addColumnIfMissing(
+      db,
+      'contas_receber',
+      'vencimento_at',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
+      'formas_pagamento',
+      'permite_vencimento',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+
+    await _addColumnIfMissing(
+      db,
+      'vendas',
+      'desconto_valor',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, 'vendas', 'desconto_percentual', 'REAL');
+  }
+
+  static Future<void> _ensureProdutosSchema(Database db) async {
+    await _addColumnIfMissing(db, 'produtos', 'tipo_id', 'INTEGER');
   }
 
   static Future<void> _seedFormasPagamento(Database db) async {

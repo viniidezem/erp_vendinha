@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../controller/formas_pagamento_controller.dart';
 import '../data/forma_pagamento_model.dart';
@@ -107,6 +108,11 @@ class _FormasPagamentoScreenState extends ConsumerState<FormasPagamentoScreen> {
                     } else {
                       parts.add('Sem parcelamento');
                     }
+                    parts.add(
+                      fp.permiteInformarVencimento
+                          ? 'Vencimento manual'
+                          : 'Sem vencimento manual',
+                    );
 
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -115,9 +121,20 @@ class _FormasPagamentoScreenState extends ConsumerState<FormasPagamentoScreen> {
                       onTap: () => _openForm(forma: fp),
                       trailing: Switch(
                         value: fp.ativo,
-                        onChanged: (v) {
+                        onChanged: (v) async {
                           if (fp.id == null) return;
-                          ref.read(formasPagamentoControllerProvider.notifier).setAtivo(fp.id!, v);
+                          try {
+                            await ref
+                                .read(formasPagamentoControllerProvider.notifier)
+                                .setAtivo(fp.id!, v);
+                          } catch (e) {
+                            if (context.mounted) {
+                              await showErrorDialog(
+                                context,
+                                'Erro ao atualizar forma de pagamento:\n$e',
+                              );
+                            }
+                          }
                         },
                       ),
                     );
