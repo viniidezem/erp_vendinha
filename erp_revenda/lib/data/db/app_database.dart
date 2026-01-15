@@ -460,6 +460,7 @@ class AppDatabase {
     );
   }
 
+
   static Future<void> _addColumnIfMissing(
     Database db,
     String table,

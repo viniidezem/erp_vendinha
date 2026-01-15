@@ -91,6 +91,28 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KpiCard(
+                        title: 'Pedidos abertos',
+                        value: r.pedidosAbertos.toString(),
+                        subtitle: 'Em andamento',
+                        icon: Icons.receipt_long_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _KpiCard(
+                        title: 'Aguardando pagto',
+                        value: r.pedidosAguardandoPagamento.toString(),
+                        subtitle: 'Cobrança pendente',
+                        icon: Icons.payments_outlined,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 22),
                 const Text(
                   'Módulos',

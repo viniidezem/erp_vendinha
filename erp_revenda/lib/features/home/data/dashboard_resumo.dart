@@ -9,6 +9,10 @@ class DashboardResumo {
   final int produtosAtivos;
   final int produtosComSaldo;
 
+  // Pedidos
+  final int pedidosAbertos;
+  final int pedidosAguardandoPagamento;
+
   const DashboardResumo({
     required this.vendasHojeTotal,
     required this.vendasHojeQtde,
@@ -17,6 +21,8 @@ class DashboardResumo {
     required this.clientesAtivos,
     required this.produtosAtivos,
     required this.produtosComSaldo,
+    required this.pedidosAbertos,
+    required this.pedidosAguardandoPagamento,
   });
 
   factory DashboardResumo.empty() => const DashboardResumo(
@@ -27,5 +33,7 @@ class DashboardResumo {
         clientesAtivos: 0,
         produtosAtivos: 0,
         produtosComSaldo: 0,
+        pedidosAbertos: 0,
+        pedidosAguardandoPagamento: 0,
       );
 }

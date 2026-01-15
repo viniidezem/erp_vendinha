@@ -49,21 +49,30 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
     }
   }
 
-  Future<void> _salvar(BuildContext context) async {
+  Future<void> _salvar() async {
+    // Captura dependências antes de awaits para evitar warnings de BuildContext em async gaps.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     final enderecos = await ref.read(clienteEnderecosProvider(widget.args.clienteId).future);
+    if (!mounted) return;
+
+    void toast(String msg) {
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+    }
 
     if (_formaPagamentoId == null) {
-      _toast(context, 'Selecione uma forma de pagamento.');
+      toast('Selecione uma forma de pagamento.');
       return;
     }
 
     if (_entregaTipo == VendaEntregaTipo.entrega) {
       if (enderecos.isEmpty) {
-        _toast(context, 'Cliente sem endereço. Selecione Retirada / sem entrega.');
+        toast('Cliente sem endereço. Selecione Retirada / sem entrega.');
         return;
       }
       if (_enderecoId == null) {
-        _toast(context, 'Selecione um endereço de entrega.');
+        toast('Selecione um endereço de entrega.');
         return;
       }
     }
@@ -80,6 +89,7 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
       parcelas: _parcelas,
       observacao: _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim(),
     );
+    if (!mounted) return;
 
     // Limpa estado da venda em andamento
     ref.read(vendaEmAndamentoProvider.notifier).limpar();
@@ -87,15 +97,10 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
 
     // Atualiza lista
     await ref.read(vendasListProvider.notifier).refresh();
+    if (!mounted) return;
 
-    if (context.mounted) {
-      _toast(context, 'Pedido registrado com sucesso.');
-      Navigator.of(context).pop(true);
-    }
-  }
-
-  void _toast(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    toast('Pedido registrado com sucesso.');
+    navigator.pop(true);
   }
 
   @override
@@ -140,25 +145,27 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    value: VendaEntregaTipo.entrega,
-                    groupValue: _entregaTipo,
-                    title: const Text('Entrega (selecionar endereço)'),
-                    onChanged: (v) => setState(() {
-                      _entregaTipo = v!;
-                      _enderecoId = null; // nunca pré-seleciona
-                    }),
-                  ),
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    value: VendaEntregaTipo.retirada,
-                    groupValue: _entregaTipo,
-                    title: const Text('Retirada / sem entrega'),
-                    onChanged: (v) => setState(() {
-                      _entregaTipo = v!;
-                      _enderecoId = null;
-                    }),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Entrega (selecionar endereço)'),
+                        selected: _entregaTipo == VendaEntregaTipo.entrega,
+                        onSelected: (_) => setState(() {
+                          _entregaTipo = VendaEntregaTipo.entrega;
+                          _enderecoId = null; // nunca pré-seleciona
+                        }),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Retirada / sem entrega'),
+                        selected: _entregaTipo == VendaEntregaTipo.retirada,
+                        onSelected: (_) => setState(() {
+                          _entregaTipo = VendaEntregaTipo.retirada;
+                          _enderecoId = null;
+                        }),
+                      ),
+                    ],
                   ),
                   if (_entregaTipo == VendaEntregaTipo.entrega) ...[
                     const Divider(height: 24),
@@ -178,12 +185,11 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                         return Column(
                           children: [
                             for (final e in enderecos)
-                              RadioListTile<int>(
-                                value: e.id!,
-                                groupValue: _enderecoId,
-                                onChanged: (v) => setState(() => _enderecoId = v),
-                                title: Text((e.rotulo ?? '').trim().isEmpty ? 'Endereço' : e.rotulo!.trim()),
-                                subtitle: Text(e.resumo()),
+                              _EnderecoTile(
+                                title: (e.rotulo ?? '').trim().isEmpty ? 'Endereço' : e.rotulo!.trim(),
+                                subtitle: e.resumo(),
+                                selected: _enderecoId == e.id,
+                                onTap: () => setState(() => _enderecoId = e.id),
                               ),
                           ],
                         );
@@ -221,60 +227,75 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                         });
                       }
 
+                      final formasAtivas = formas.where((f) => f.ativo).toList();
+
                       return Column(
                         children: [
-                          DropdownButtonFormField<int>(
-                            value: _formaPagamentoId,
+                          InputDecorator(
                             decoration: const InputDecoration(
                               labelText: 'Forma de pagamento',
+                              border: OutlineInputBorder(),
                             ),
-                            items: formas
-                                .where((f) => f.ativo)
-                                .map(
-                                  (f) => DropdownMenuItem<int>(
-                                    value: f.id,
-                                    child: Text(f.nome),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              setState(() {
-                                _formaPagamentoId = v;
-                                final fp = _findForma(formas, v);
-                                if (fp == null) {
-                                  _parcelas = 1;
-                                } else if (!fp.permiteParcelamento) {
-                                  _parcelas = 1;
-                                } else {
-                                  // Mantém se estiver dentro do máximo, senão ajusta
-                                  final max = fp.maxParcelas;
-                                  if (_parcelas < 1) _parcelas = 1;
-                                  if (_parcelas > max) _parcelas = max;
-                                }
-                              });
-                            },
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int?>(
+                                isExpanded: true,
+                                value: _formaPagamentoId,
+                                hint: const Text('Selecione'),
+                                items: formasAtivas
+                                    .where((f) => f.id != null)
+                                    .map(
+                                      (f) => DropdownMenuItem<int?>(
+                                        value: f.id,
+                                        child: Text(f.nome),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) {
+                                  setState(() {
+                                    _formaPagamentoId = v;
+                                    final fp = _findForma(formasAtivas, v);
+                                    if (fp == null || !fp.permiteParcelamento) {
+                                      _parcelas = 1;
+                                    } else {
+                                      final max = fp.maxParcelas;
+                                      if (_parcelas < 1) _parcelas = 1;
+                                      if (_parcelas > max) _parcelas = max;
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           if (formaSel != null && formaSel.permiteParcelamento) ...[
-                            DropdownButtonFormField<int>(
-                              value: _parcelas,
+                            InputDecorator(
                               decoration: const InputDecoration(
                                 labelText: 'Parcelas',
+                                border: OutlineInputBorder(),
                               ),
-                              items: List.generate(
-                                formaSel.maxParcelas,
-                                (i) => DropdownMenuItem(
-                                  value: i + 1,
-                                  child: Text('${i + 1}x'),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  isExpanded: true,
+                                  value: _parcelas,
+                                  items: List.generate(
+                                    formaSel.maxParcelas,
+                                    (i) => DropdownMenuItem(
+                                      value: i + 1,
+                                      child: Text('${i + 1}x'),
+                                    ),
+                                  ),
+                                  onChanged: (v) => setState(() => _parcelas = v ?? 1),
                                 ),
                               ),
-                              onChanged: (v) => setState(() => _parcelas = v ?? 1),
                             ),
                           ] else ...[
                             TextFormField(
                               enabled: false,
                               initialValue: '1x',
-                              decoration: const InputDecoration(labelText: 'Parcelas'),
+                              decoration: const InputDecoration(
+                                labelText: 'Parcelas',
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                           ],
                         ],
@@ -312,7 +333,7 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
 
           const SizedBox(height: 14),
           ElevatedButton.icon(
-            onPressed: () => _salvar(context),
+            onPressed: _salvar,
             icon: const Icon(Icons.check_circle_outline),
             label: const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -321,6 +342,35 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
           ),
           const SizedBox(height: 18),
         ],
+      ),
+    );
+  }
+}
+
+class _EnderecoTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _EnderecoTile({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: onTap,
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: Icon(
+          selected ? Icons.check_circle : Icons.radio_button_unchecked,
+        ),
       ),
     );
   }

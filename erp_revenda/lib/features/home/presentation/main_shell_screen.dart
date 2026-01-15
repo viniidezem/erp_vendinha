@@ -1,6 +1,5 @@
 import 'package:bottom_bar/bottom_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../app/ui/app_colors.dart';
 import '../../cadastros/presentation/cadastros_hub_screen.dart';
@@ -34,15 +33,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
-
-      // Botão central: Nova Venda
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        onPressed: () => context.push('/vendas/nova'),
-        child: const Icon(Icons.add),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
       bottomNavigationBar: SafeArea(
         top: false,

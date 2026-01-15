@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../../data/db/app_database.dart';
 import 'dashboard_resumo.dart';
+import '../../vendas/data/venda_models.dart';
 
 class DashboardRepository {
   final AppDatabase _db;
@@ -51,6 +52,25 @@ class DashboardRepository {
     );
     final produtosComSaldo = (produtosComSaldoRows.first['qtd'] as int? ?? 0);
 
+    // Pedidos abertos (inclui pagamento e expedição, exclui ABERTA/CANCELADA/FINALIZADO)
+    final abertos = VendaStatus.abertos;
+    final placeholders = List.filled(abertos.length, '?').join(', ');
+    final pedidosAbertosRows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS qtd
+      FROM vendas
+      WHERE status IN ($placeholders);
+    ''',
+      abertos,
+    );
+    final pedidosAbertos = (pedidosAbertosRows.first['qtd'] as int? ?? 0);
+
+    // Aguardando pagamento
+    final aguardandoPagtoRows = await db.rawQuery(
+      "SELECT COUNT(*) AS qtd FROM vendas WHERE status = 'AGUARDANDO_PAGAMENTO';",
+    );
+    final pedidosAguardandoPagamento = (aguardandoPagtoRows.first['qtd'] as int? ?? 0);
+
     return DashboardResumo(
       vendasHojeTotal: vendasHojeTotal,
       vendasHojeQtde: vendasHojeQtde,
@@ -59,6 +79,8 @@ class DashboardRepository {
       clientesAtivos: clientesAtivos,
       produtosAtivos: produtosAtivos,
       produtosComSaldo: produtosComSaldo,
+      pedidosAbertos: pedidosAbertos,
+      pedidosAguardandoPagamento: pedidosAguardandoPagamento,
     );
   }
 }

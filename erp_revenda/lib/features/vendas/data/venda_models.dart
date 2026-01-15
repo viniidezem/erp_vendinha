@@ -86,6 +86,11 @@ class VendaStatus {
     aguardandoMercadoria,
     emExpedicao,
   ];
+
+  /// Status mostrados em filtros/seletores padrÇœo.
+  static const List<String> filtros = fluxoOperacional;
+
+  static bool isAberto(String status) => abertos.contains(status);
 }
 
 class Venda {

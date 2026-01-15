@@ -45,14 +45,7 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
     final vendasAsync = ref.watch(vendasListProvider);
     final statusFiltro = ref.watch(pedidosStatusFiltroProvider);
 
-    final chips = <MapEntry<String?, String>>[
-      const MapEntry(null, 'Todos'),
-      const MapEntry(VendaStatus.pedido, 'Pedido'),
-      const MapEntry(VendaStatus.aguardandoMercadoria, 'Aguardando'),
-      const MapEntry(VendaStatus.emExpedicao, 'Expedição'),
-      const MapEntry(VendaStatus.entregue, 'Entregue'),
-      const MapEntry(VendaStatus.cancelada, 'Cancelado'),
-    ];
+    final statusChips = <String?>[null, ...VendaStatus.filtros];
 
     return AppPage(
       title: 'Pedidos',
@@ -82,17 +75,16 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
-              itemCount: chips.length,
+              itemCount: statusChips.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
-                final entry = chips[i];
-                final selected = statusFiltro == entry.key;
+                final status = statusChips[i];
+                final selected = statusFiltro == status;
                 return ChoiceChip(
-                  label: Text(entry.value),
+                  label: Text(status == null ? 'Todos' : VendaStatus.label(status)),
                   selected: selected,
                   onSelected: (_) {
-                    ref.read(pedidosStatusFiltroProvider.notifier).state =
-                        entry.key;
+                    ref.read(pedidosStatusFiltroProvider.notifier).state = status;
                   },
                 );
               },
