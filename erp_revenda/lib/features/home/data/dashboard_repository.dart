@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 import '../../../data/db/app_database.dart';
 import 'dashboard_resumo.dart';
 import '../../vendas/data/venda_models.dart';
+import 'dashboard_grafico.dart';
+import '../../settings/data/dashboard_settings.dart';
 
 class DashboardRepository {
   final AppDatabase _db;
@@ -84,5 +86,147 @@ class DashboardRepository {
       pedidosAbertos: pedidosAbertos,
       pedidosAguardandoPagamento: pedidosAguardandoPagamento,
     );
+  }
+
+  Future<DashboardGrafico> carregarGrafico({
+    required String periodo,
+  }) async {
+    final Database db = await _db.database;
+
+    if (periodo == DashboardGraficoPeriodo.semanaAtual) {
+      return _graficoSemanaAtual(db);
+    }
+    if (periodo == DashboardGraficoPeriodo.diaAtual) {
+      return _graficoDiaAtual(db);
+    }
+    return _graficoMesAtual(db);
+  }
+
+  Future<DashboardGrafico> _graficoMesAtual(Database db) async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, 1);
+    final end = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+    final daysInMonth = end.day;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        strftime('%d', datetime(created_at / 1000, 'unixepoch', 'localtime')) AS dia,
+        SUM(total) AS total
+      FROM vendas
+      WHERE created_at BETWEEN ? AND ?
+        AND status NOT IN ('ABERTA', 'CANCELADA')
+      GROUP BY dia
+      ORDER BY dia ASC
+    ''',
+      [startMs, endMs],
+    );
+
+    final byDay = <int, double>{};
+    for (final r in rows) {
+      final d = int.tryParse((r['dia'] as String?) ?? '') ?? 0;
+      final total = (r['total'] as num?)?.toDouble() ?? 0;
+      if (d > 0) byDay[d] = total;
+    }
+
+    final itens = <DashboardGraficoItem>[];
+    double totalPeriodo = 0;
+    for (var d = 1; d <= daysInMonth; d++) {
+      final value = byDay[d] ?? 0;
+      totalPeriodo += value;
+      itens.add(DashboardGraficoItem(label: d.toString(), valor: value));
+    }
+
+    return DashboardGrafico(itens: itens, total: totalPeriodo);
+  }
+
+  Future<DashboardGrafico> _graficoSemanaAtual(Database db) async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    final end = start.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59, milliseconds: 999));
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        date(datetime(created_at / 1000, 'unixepoch', 'localtime')) AS dia,
+        SUM(total) AS total
+      FROM vendas
+      WHERE created_at BETWEEN ? AND ?
+        AND status NOT IN ('ABERTA', 'CANCELADA')
+      GROUP BY dia
+      ORDER BY dia ASC
+    ''',
+      [startMs, endMs],
+    );
+
+    final byDay = <String, double>{};
+    for (final r in rows) {
+      final d = (r['dia'] as String?) ?? '';
+      final total = (r['total'] as num?)?.toDouble() ?? 0;
+      if (d.isNotEmpty) byDay[d] = total;
+    }
+
+    final labels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+    final itens = <DashboardGraficoItem>[];
+    double totalPeriodo = 0;
+    for (var i = 0; i < 7; i++) {
+      final date = start.add(Duration(days: i));
+      final key =
+          '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final value = byDay[key] ?? 0;
+      totalPeriodo += value;
+      itens.add(DashboardGraficoItem(label: labels[i], valor: value));
+    }
+
+    return DashboardGrafico(itens: itens, total: totalPeriodo);
+  }
+
+  Future<DashboardGrafico> _graficoDiaAtual(Database db) async {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(hours: 23, minutes: 59, seconds: 59, milliseconds: 999));
+    final startMs = start.millisecondsSinceEpoch;
+    final endMs = end.millisecondsSinceEpoch;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        strftime('%H', datetime(created_at / 1000, 'unixepoch', 'localtime')) AS hora,
+        SUM(total) AS total
+      FROM vendas
+      WHERE created_at BETWEEN ? AND ?
+        AND status NOT IN ('ABERTA', 'CANCELADA')
+      GROUP BY hora
+      ORDER BY hora ASC
+    ''',
+      [startMs, endMs],
+    );
+
+    final byHour = <int, double>{};
+    for (final r in rows) {
+      final h = int.tryParse((r['hora'] as String?) ?? '') ?? -1;
+      final total = (r['total'] as num?)?.toDouble() ?? 0;
+      if (h >= 0) byHour[h] = total;
+    }
+
+    final itens = <DashboardGraficoItem>[];
+    double totalPeriodo = 0;
+    for (var h = 0; h < 24; h++) {
+      final value = byHour[h] ?? 0;
+      totalPeriodo += value;
+      itens.add(
+        DashboardGraficoItem(
+          label: h.toString().padLeft(2, '0'),
+          valor: value,
+        ),
+      );
+    }
+
+    return DashboardGrafico(itens: itens, total: totalPeriodo);
   }
 }

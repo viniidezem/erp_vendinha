@@ -75,6 +75,7 @@ class VendasRepository {
       search: search,
       onlyActive: true,
       onlyWithStock: somenteComSaldo,
+      includeKits: true,
     );
   }
 
@@ -230,11 +231,46 @@ class VendasRepository {
                 )
                 .toList();
 
-        for (final it in sourceItens) {
-          await txn.rawUpdate(
-            'UPDATE produtos SET estoque = estoque - ? WHERE id = ?',
-            [it.qtd, it.produtoId],
+        final ids = sourceItens.map((e) => e.produtoId).toSet().toList();
+        final isKitById = <int, bool>{};
+        if (ids.isNotEmpty) {
+          final rows = await txn.rawQuery(
+            'SELECT id, is_kit FROM produtos WHERE id IN (${List.filled(ids.length, '?').join(',')})',
+            ids,
           );
+          for (final r in rows) {
+            final id = r['id'] as int?;
+            if (id == null) continue;
+            isKitById[id] = (r['is_kit'] as int? ?? 0) == 1;
+          }
+        }
+
+        for (final it in sourceItens) {
+          final isKit = isKitById[it.produtoId] ?? false;
+          if (!isKit) {
+            await txn.rawUpdate(
+              'UPDATE produtos SET estoque = estoque - ? WHERE id = ?',
+              [it.qtd, it.produtoId],
+            );
+            continue;
+          }
+
+          final kitItens = await txn.query(
+            'kit_itens',
+            columns: ['produto_id', 'qtd'],
+            where: 'kit_id = ?',
+            whereArgs: [it.produtoId],
+          );
+          for (final ki in kitItens) {
+            final produtoId = ki['produto_id'] as int?;
+            if (produtoId == null) continue;
+            final qtd = (ki['qtd'] as num).toDouble();
+            final totalQtd = it.qtd * qtd;
+            await txn.rawUpdate(
+              'UPDATE produtos SET estoque = estoque - ? WHERE id = ?',
+              [totalQtd, produtoId],
+            );
+          }
         }
       }
 
@@ -450,11 +486,25 @@ class VendasRepository {
         'parcela_numero': i,
         'parcelas_total': parcelasSafe,
         'valor': valor,
+        'valor_recebido': 0,
         'status': 'ABERTA',
         'vencimento_at': vencimento?.millisecondsSinceEpoch,
         'created_at': createdAtMs,
       });
     }
+  }
+
+  Future<void> cancelarFinanceiroPorVenda(int vendaId) async {
+    final db = await _db.database;
+    await db.update(
+      'contas_receber',
+      {
+        'status': 'CANCELADA',
+        'valor_recebido': 0,
+      },
+      where: 'venda_id = ? AND status = ?',
+      whereArgs: [vendaId, 'ABERTA'],
+    );
   }
 
 }

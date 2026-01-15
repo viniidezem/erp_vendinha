@@ -11,6 +11,8 @@ class ProdutoRepository {
     String search = '',
     bool onlyActive = true,
     bool onlyWithStock = false,
+    int? fornecedorId,
+    bool includeKits = false,
   }) async {
     final Database db = await _db.database;
 
@@ -21,7 +23,18 @@ class ProdutoRepository {
       whereParts.add('ativo = 1');
     }
     if (onlyWithStock) {
-      whereParts.add('estoque > 0');
+      if (includeKits) {
+        whereParts.add('(estoque > 0 OR is_kit = 1)');
+      } else {
+        whereParts.add('estoque > 0');
+      }
+    }
+    if (!includeKits) {
+      whereParts.add('(is_kit IS NULL OR is_kit = 0)');
+    }
+    if (fornecedorId != null) {
+      whereParts.add('fornecedor_id = ?');
+      args.add(fornecedorId);
     }
 
     final term = search.trim();

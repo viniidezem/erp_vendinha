@@ -38,6 +38,7 @@ class Produto {
 
   final double estoque;
   final bool ativo;
+  final bool isKit;
   final DateTime createdAt;
 
   Produto({
@@ -55,6 +56,7 @@ class Produto {
     this.familiaId,
     required this.estoque,
     required this.ativo,
+    this.isKit = false,
     required this.createdAt,
   });
 
@@ -73,6 +75,7 @@ class Produto {
     int? familiaId,
     double? estoque,
     bool? ativo,
+    bool? isKit,
     DateTime? createdAt,
   }) {
     return Produto(
@@ -90,6 +93,7 @@ class Produto {
       familiaId: familiaId ?? this.familiaId,
       estoque: estoque ?? this.estoque,
       ativo: ativo ?? this.ativo,
+      isKit: isKit ?? this.isKit,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -109,6 +113,7 @@ class Produto {
         'familia_id': familiaId,
         'estoque': estoque,
         'ativo': ativo ? 1 : 0,
+        'is_kit': isKit ? 1 : 0,
         'created_at': createdAt.millisecondsSinceEpoch,
       };
 
@@ -128,6 +133,7 @@ class Produto {
       familiaId: map['familia_id'] as int?,
       estoque: (map['estoque'] as num? ?? 0).toDouble(),
       ativo: (map['ativo'] as int? ?? 1) == 1,
+      isKit: (map['is_kit'] as int? ?? 0) == 1,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
     );
   }

@@ -20,6 +20,18 @@ class PedidoDetalheScreen extends ConsumerWidget {
     return '${two(dt.day)}/${two(dt.month)} ${two(dt.hour)}:${two(dt.minute)}';
   }
 
+  List<double> _parcelasValores(double total, int parcelas) {
+    final parcelasSafe = parcelas < 1 ? 1 : parcelas;
+    final totalCents = (total * 100).round();
+    final baseCents = totalCents ~/ parcelasSafe;
+    final residual = totalCents % parcelasSafe;
+
+    return List.generate(parcelasSafe, (i) {
+      final cents = baseCents + (i == 0 ? residual : 0);
+      return cents / 100.0;
+    });
+  }
+
   Color _statusColor(String status) {
     switch (status) {
       case VendaStatus.cancelada:
@@ -106,6 +118,32 @@ class PedidoDetalheScreen extends ConsumerWidget {
           obs: obsCtrl.text.trim().isEmpty ? null : obsCtrl.text.trim(),
         );
 
+    if (novoStatus == VendaStatus.cancelada && context.mounted) {
+      final cancelarFinanceiro = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancelar o financeiro?'),
+          content: const Text('Cancelar o financeiro deste documento?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('NÇœo'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Sim, cancelar'),
+            ),
+          ],
+        ),
+      );
+
+      if (cancelarFinanceiro == true && context.mounted) {
+        await ref.read(vendasRepositoryProvider).cancelarFinanceiroPorVenda(
+              vendaId,
+            );
+      }
+    }
+
     // Atualiza tela e lista
     ref.invalidate(pedidoDetalheProvider(vendaId));
     await ref.read(vendasListProvider.notifier).refresh();
@@ -182,6 +220,10 @@ class PedidoDetalheScreen extends ConsumerWidget {
         data: (detalhe) {
           final venda = detalhe.venda;
           final actions = _acoesPara(venda.status);
+          final subtotal = detalhe.itens.fold<double>(0, (s, i) => s + i.subtotal);
+          final desconto = venda.descontoValor;
+          final parcelas = venda.parcelas ?? 1;
+          final parcelasValores = _parcelasValores(venda.total, parcelas);
 
           final formasAsync = ref.watch(formasPagamentoControllerProvider);
           final enderecosAsync = (venda.clienteId == null)
@@ -366,6 +408,69 @@ class PedidoDetalheScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
+                          'Resumo financeiro',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('Itens:'),
+                        const SizedBox(height: 6),
+                        const _ResumoHeaderRow(),
+                        const Divider(height: 16),
+                        for (final it in detalhe.itens) _ResumoItemRow(item: it),
+                        const Divider(height: 20),
+                        Row(
+                          children: [
+                            const Expanded(child: Text('Total Itens')),
+                            Text('R\$ ${subtotal.toStringAsFixed(2)}'),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Expanded(child: Text('Desconto')),
+                            Text('R\$ ${desconto.toStringAsFixed(2)}'),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Total Final',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Text(
+                              'R\$ ${venda.total.toStringAsFixed(2)}',
+                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text('Parcelas: ${parcelas}x'),
+                        if (parcelasValores.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          for (var i = 0; i < parcelasValores.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)}',
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
                           'Histórico de status',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -393,6 +498,55 @@ class PedidoDetalheScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _ResumoHeaderRow extends StatelessWidget {
+  const _ResumoHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const headerStyle = TextStyle(fontWeight: FontWeight.w700, fontSize: 12);
+
+    return Row(
+      children: const [
+        Expanded(child: Text('Produto', style: headerStyle)),
+        SizedBox(width: 60, child: Text('QTD', textAlign: TextAlign.right, style: headerStyle)),
+        SizedBox(width: 90, child: Text('Valor', textAlign: TextAlign.right, style: headerStyle)),
+      ],
+    );
+  }
+}
+
+class _ResumoItemRow extends StatelessWidget {
+  final VendaItem item;
+
+  const _ResumoItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(item.produtoNome)),
+          SizedBox(
+            width: 60,
+            child: Text(
+              item.qtd.toStringAsFixed(2),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'R\$ ${item.subtotal.toStringAsFixed(2)}',
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
       ),
     );
   }

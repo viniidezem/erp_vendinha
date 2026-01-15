@@ -5,7 +5,7 @@ class AppDatabase {
   static const _dbName = 'erp_revenda.db';
   // v9: garante colunas de checkout em bases já "inconsistentes" (ex.: DB marcado como v7/v8
   // mas tabela vendas ainda sem entrega_tipo/forma_pagamento_id/etc.).
-  static const _dbVersion = 12;
+  static const _dbVersion = 18;
 
   Database? _db;
 
@@ -26,6 +26,10 @@ class AppDatabase {
         await _ensureStatusLogData(db);
         await _ensureFinanceiroSchema(db);
         await _ensureProdutosSchema(db);
+        await _ensureEntradasSchema(db);
+        await _ensureFornecedoresSchema(db);
+        await _ensureKitsSchema(db);
+        await _ensureSettingsSchema(db);
       },
       onCreate: (db, version) async {
         // CLIENTES
@@ -68,6 +72,8 @@ class AppDatabase {
             nome TEXT NOT NULL,
             telefone TEXT,
             email TEXT,
+            contato_nome TEXT,
+            contato_telefone TEXT,
             created_at INTEGER NOT NULL
           );
         ''');
@@ -99,6 +105,7 @@ class AppDatabase {
             familia_id INTEGER,
             estoque REAL NOT NULL DEFAULT 0,
             ativo INTEGER NOT NULL DEFAULT 1,
+            is_kit INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL
           );
         ''');
@@ -109,6 +116,15 @@ class AppDatabase {
             produto_id INTEGER NOT NULL,
             categoria_id INTEGER NOT NULL,
             PRIMARY KEY (produto_id, categoria_id)
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE kit_itens (
+            kit_id INTEGER NOT NULL,
+            produto_id INTEGER NOT NULL,
+            qtd REAL NOT NULL,
+            PRIMARY KEY (kit_id, produto_id)
           );
         ''');
 
@@ -158,7 +174,26 @@ class AppDatabase {
             parcela_numero INTEGER NOT NULL,
             parcelas_total INTEGER NOT NULL,
             valor REAL NOT NULL,
+            valor_recebido REAL NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'ABERTA',
+            vencimento_at INTEGER,
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE contas_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrada_id INTEGER,
+            fornecedor_id INTEGER NOT NULL,
+            descricao TEXT,
+            total REAL NOT NULL,
+            parcela_numero INTEGER NOT NULL,
+            parcelas_total INTEGER NOT NULL,
+            valor REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ABERTA',
+            vencimento_at INTEGER,
+            pago_at INTEGER,
             created_at INTEGER NOT NULL
           );
         ''');
@@ -184,6 +219,40 @@ class AppDatabase {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
             created_at INTEGER NOT NULL
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE entradas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fornecedor_id INTEGER NOT NULL,
+            data_nota INTEGER,
+            data_entrada INTEGER NOT NULL,
+            numero_nota TEXT,
+            observacao TEXT,
+            total_nota REAL NOT NULL DEFAULT 0,
+            frete_total REAL NOT NULL DEFAULT 0,
+            desconto_total REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'RASCUNHO',
+            created_at INTEGER NOT NULL
+          );
+        ''');
+
+        await db.execute('''
+          CREATE TABLE entrada_itens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrada_id INTEGER NOT NULL,
+            produto_id INTEGER NOT NULL,
+            qtd REAL NOT NULL,
+            custo_unit REAL NOT NULL,
+            subtotal REAL NOT NULL
           );
         ''');
       },
@@ -372,11 +441,42 @@ class AppDatabase {
         if (oldVersion < 12) {
           await _ensureProdutosSchema(db);
         }
+        if (oldVersion < 13) {
+          await _ensureFinanceiroSchema(db);
+        }
+        if (oldVersion < 14) {
+          await _ensureEntradasSchema(db);
+        }
+        if (oldVersion < 15) {
+          await _ensureFinanceiroSchema(db);
+        }
+        if (oldVersion < 16) {
+          await _ensureFornecedoresSchema(db);
+        }
+        if (oldVersion < 17) {
+          await _ensureKitsSchema(db);
+        }
+        if (oldVersion < 18) {
+          await _ensureSettingsSchema(db);
+        }
       },
     );
 
     _db = db;
     return db;
+  }
+
+  Future<String> dbPath() async {
+    final dbPath = await getDatabasesPath();
+    return p.join(dbPath, _dbName);
+  }
+
+  Future<void> close() async {
+    final existing = _db;
+    if (existing != null && existing.isOpen) {
+      await existing.close();
+    }
+    _db = null;
   }
 
   static Future<void> _ensureCheckoutSchema(Database db) async {
@@ -485,6 +585,84 @@ class AppDatabase {
     );
     await _addColumnIfMissing(
       db,
+      'contas_receber',
+      'valor_recebido',
+      'REAL NOT NULL DEFAULT 0',
+    );
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS contas_pagar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entrada_id INTEGER,
+        fornecedor_id INTEGER NOT NULL,
+        descricao TEXT,
+        total REAL NOT NULL,
+        parcela_numero INTEGER NOT NULL,
+        parcelas_total INTEGER NOT NULL,
+        valor REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ABERTA',
+        vencimento_at INTEGER,
+        pago_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+    ''');
+
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'entrada_id',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'descricao',
+      'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'total',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'parcela_numero',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'parcelas_total',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'valor',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'status',
+      "TEXT NOT NULL DEFAULT 'ABERTA'",
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'vencimento_at',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
+      'contas_pagar',
+      'pago_at',
+      'INTEGER',
+    );
+    await _addColumnIfMissing(
+      db,
       'formas_pagamento',
       'permite_vencimento',
       'INTEGER NOT NULL DEFAULT 0',
@@ -501,6 +679,96 @@ class AppDatabase {
 
   static Future<void> _ensureProdutosSchema(Database db) async {
     await _addColumnIfMissing(db, 'produtos', 'tipo_id', 'INTEGER');
+  }
+
+  static Future<void> _ensureEntradasSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fornecedor_id INTEGER NOT NULL,
+        data_nota INTEGER,
+        data_entrada INTEGER NOT NULL,
+        numero_nota TEXT,
+        observacao TEXT,
+        total_nota REAL NOT NULL DEFAULT 0,
+        frete_total REAL NOT NULL DEFAULT 0,
+        desconto_total REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'RASCUNHO',
+        created_at INTEGER NOT NULL
+      );
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entrada_itens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entrada_id INTEGER NOT NULL,
+        produto_id INTEGER NOT NULL,
+        qtd REAL NOT NULL,
+        custo_unit REAL NOT NULL,
+        subtotal REAL NOT NULL
+      );
+    ''');
+
+    await _addColumnIfMissing(db, 'entradas', 'data_nota', 'INTEGER');
+    await _addColumnIfMissing(db, 'entradas', 'data_entrada', 'INTEGER');
+    await _addColumnIfMissing(db, 'entradas', 'numero_nota', 'TEXT');
+    await _addColumnIfMissing(db, 'entradas', 'observacao', 'TEXT');
+    await _addColumnIfMissing(
+      db,
+      'entradas',
+      'total_nota',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'entradas',
+      'frete_total',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'entradas',
+      'desconto_total',
+      'REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'entradas',
+      'status',
+      "TEXT NOT NULL DEFAULT 'RASCUNHO'",
+    );
+  }
+
+  static Future<void> _ensureFornecedoresSchema(Database db) async {
+    await _addColumnIfMissing(db, 'fornecedores', 'contato_nome', 'TEXT');
+    await _addColumnIfMissing(db, 'fornecedores', 'contato_telefone', 'TEXT');
+  }
+
+  static Future<void> _ensureKitsSchema(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'produtos',
+      'is_kit',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS kit_itens (
+        kit_id INTEGER NOT NULL,
+        produto_id INTEGER NOT NULL,
+        qtd REAL NOT NULL,
+        PRIMARY KEY (kit_id, produto_id)
+      );
+    ''');
+  }
+
+  static Future<void> _ensureSettingsSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    ''');
   }
 
   static Future<void> _seedFormasPagamento(Database db) async {

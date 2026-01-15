@@ -3,6 +3,8 @@ class Fornecedor {
   final String nome;
   final String? telefone;
   final String? email;
+  final String? contatoNome;
+  final String? contatoTelefone;
   final DateTime createdAt;
 
   Fornecedor({
@@ -10,6 +12,8 @@ class Fornecedor {
     required this.nome,
     this.telefone,
     this.email,
+    this.contatoNome,
+    this.contatoTelefone,
     required this.createdAt,
   });
 
@@ -18,6 +22,8 @@ class Fornecedor {
     'nome': nome,
     'telefone': telefone,
     'email': email,
+    'contato_nome': contatoNome,
+    'contato_telefone': contatoTelefone,
     'created_at': createdAt.millisecondsSinceEpoch,
   };
 
@@ -26,6 +32,8 @@ class Fornecedor {
     nome: map['nome'] as String,
     telefone: map['telefone'] as String?,
     email: map['email'] as String?,
+    contatoNome: map['contato_nome'] as String?,
+    contatoTelefone: map['contato_telefone'] as String?,
     createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
   );
 }

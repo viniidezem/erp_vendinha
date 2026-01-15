@@ -198,6 +198,7 @@ class _ProdutoFormScreenState extends ConsumerState<ProdutoFormScreen> {
         familiaId: _familiaId,
         estoque: widget.produto?.estoque ?? 0,
         ativo: _ativo,
+        isKit: widget.produto?.isKit ?? false,
         createdAt: widget.produto?.createdAt ?? DateTime.now(),
       );
 

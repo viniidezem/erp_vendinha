@@ -21,8 +21,46 @@ class FornecedorRepository {
       nome: nome.trim(),
       telefone: (telefone ?? '').trim().isEmpty ? null : telefone!.trim(),
       email: (email ?? '').trim().isEmpty ? null : email!.trim(),
+      contatoNome: null,
+      contatoTelefone: null,
       createdAt: DateTime.now(),
     );
     return db.insert('fornecedores', f.toMap());
+  }
+
+  Future<int> inserirCompleto({
+    required String nome,
+    String? telefone,
+    String? email,
+    String? contatoNome,
+    String? contatoTelefone,
+  }) async {
+    final db = await _db.database;
+    final f = Fornecedor(
+      nome: nome.trim(),
+      telefone: (telefone ?? '').trim().isEmpty ? null : telefone!.trim(),
+      email: (email ?? '').trim().isEmpty ? null : email!.trim(),
+      contatoNome:
+          (contatoNome ?? '').trim().isEmpty ? null : contatoNome!.trim(),
+      contatoTelefone: (contatoTelefone ?? '').trim().isEmpty
+          ? null
+          : contatoTelefone!.trim(),
+      createdAt: DateTime.now(),
+    );
+    return db.insert('fornecedores', f.toMap());
+  }
+
+  Future<int> atualizar(Fornecedor f) async {
+    final db = await _db.database;
+    final id = f.id;
+    if (id == null) {
+      throw ArgumentError('Fornecedor.id nao pode ser nulo ao atualizar.');
+    }
+    return db.update(
+      'fornecedores',
+      f.toMap(),
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

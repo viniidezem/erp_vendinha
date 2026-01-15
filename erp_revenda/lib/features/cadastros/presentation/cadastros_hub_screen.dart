@@ -9,6 +9,7 @@ import '../../../app/ui/app_colors.dart';
 
 import '../controller/cadastros_resumo_controller.dart';
 import '../data/cadastros_resumo.dart';
+import '../../fornecedores/data/fornecedor_model.dart';
 
 class CadastrosHubScreen extends ConsumerWidget {
   const CadastrosHubScreen({super.key});
@@ -54,9 +55,18 @@ class CadastrosHubScreen extends ConsumerWidget {
           _SectionTitle('Complementares'),
           const SizedBox(height: 12),
           _HubCard(
+            icon: Icons.inventory_outlined,
+            title: 'Kits',
+            subtitle: 'Combos com preco fixo',
+            countText: null,
+            onTap: () => context.push('/kits'),
+            onNew: () => context.push('/kits/form'),
+          ),
+          const SizedBox(height: 12),
+          _HubCard(
             icon: Icons.local_shipping_outlined,
             title: 'Fornecedores',
-            subtitle: 'Cadastro rápido (nome, telefone, e-mail)',
+            subtitle: 'Cadastro rapido (nome, contato, telefone, e-mail)',
             countText: resumo == null ? '—' : '${resumo!.fornecedores}',
             onTap: () => _openSheet(context, const _FornecedoresSheet()),
             onNew: () =>
@@ -281,7 +291,7 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
     super.initState();
     if (widget.openCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _openCreateDialog();
+        _openFornecedorDialog();
       });
     }
   }
@@ -292,16 +302,27 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
     super.dispose();
   }
 
-  Future<void> _openCreateDialog() async {
+  Future<void> _openFornecedorDialog({Fornecedor? fornecedor}) async {
+    final isEdit = fornecedor != null;
     final nomeCtrl = TextEditingController();
     final telCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
+    final contatoNomeCtrl = TextEditingController();
+    final contatoTelCtrl = TextEditingController();
+
+    if (fornecedor != null) {
+      nomeCtrl.text = fornecedor.nome;
+      telCtrl.text = fornecedor.telefone ?? '';
+      emailCtrl.text = fornecedor.email ?? '';
+      contatoNomeCtrl.text = fornecedor.contatoNome ?? '';
+      contatoTelCtrl.text = fornecedor.contatoTelefone ?? '';
+    }
 
     await showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: const Text('Novo fornecedor'),
+          title: Text(isEdit ? 'Editar fornecedor' : 'Novo fornecedor'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -315,6 +336,19 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                 TextField(
                   controller: telCtrl,
                   decoration: const InputDecoration(labelText: 'Telefone'),
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: contatoNomeCtrl,
+                  decoration: const InputDecoration(labelText: 'Contato (nome)'),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: contatoTelCtrl,
+                  decoration: const InputDecoration(labelText: 'Telefone contato'),
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.next,
                 ),
@@ -337,12 +371,37 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                 final nome = nomeCtrl.text.trim();
                 if (nome.isEmpty) return;
                 final repo = ref.read(cadFornecedorRepositoryProvider);
+                final telefone = telCtrl.text.trim();
+                final email = emailCtrl.text.trim();
+                final contatoNome = contatoNomeCtrl.text.trim();
+                final contatoTel = contatoTelCtrl.text.trim();
+                final telefoneValue = telefone.isEmpty ? null : telefone;
+                final emailValue = email.isEmpty ? null : email;
+                final contatoNomeValue = contatoNome.isEmpty ? null : contatoNome;
+                final contatoTelValue = contatoTel.isEmpty ? null : contatoTel;
+
                 try {
-                  await repo.inserir(
-                    nome,
-                    telefone: telCtrl.text.trim(),
-                    email: emailCtrl.text.trim(),
-                  );
+                  if (isEdit) {
+                    await repo.atualizar(
+                      Fornecedor(
+                        id: fornecedor.id,
+                        nome: nome,
+                        telefone: telefoneValue,
+                        email: emailValue,
+                        contatoNome: contatoNomeValue,
+                        contatoTelefone: contatoTelValue,
+                        createdAt: fornecedor.createdAt,
+                      ),
+                    );
+                  } else {
+                    await repo.inserirCompleto(
+                      nome: nome,
+                      telefone: telefoneValue,
+                      email: emailValue,
+                      contatoNome: contatoNomeValue,
+                      contatoTelefone: contatoTelValue,
+                    );
+                  }
                   ref.invalidate(cadFornecedoresProvider);
                   ref.invalidate(cadastrosResumoProvider);
                 } catch (e) {
@@ -356,7 +415,11 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                 if (!mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Fornecedor criado.')),
+                  SnackBar(
+                    content: Text(
+                      isEdit ? 'Fornecedor atualizado.' : 'Fornecedor criado.',
+                    ),
+                  ),
                 );
               },
               child: const Text('Salvar'),
@@ -369,7 +432,10 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
     nomeCtrl.dispose();
     telCtrl.dispose();
     emailCtrl.dispose();
+    contatoNomeCtrl.dispose();
+    contatoTelCtrl.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +463,7 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                 ),
               ),
               IconButton(
-                onPressed: _openCreateDialog,
+                onPressed: _openFornecedorDialog,
                 icon: const Icon(Icons.add),
                 tooltip: 'Novo fornecedor',
               ),
@@ -437,14 +503,32 @@ class _FornecedoresSheetState extends ConsumerState<_FornecedoresSheet> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final f = filtered[i];
+                    final parts = <String>[];
+                    if (f.telefone != null && f.telefone!.isNotEmpty) {
+                      parts.add('Tel: ${f.telefone!}');
+                    }
+                    final contatoParts = <String>[];
+                    if (f.contatoNome != null && f.contatoNome!.isNotEmpty) {
+                      contatoParts.add(f.contatoNome!);
+                    }
+                    if (f.contatoTelefone != null &&
+                        f.contatoTelefone!.isNotEmpty) {
+                      contatoParts.add(f.contatoTelefone!);
+                    }
+                    if (contatoParts.isNotEmpty) {
+                      parts.add('Contato: ${contatoParts.join(' - ')}');
+                    }
+                    if (f.email != null && f.email!.isNotEmpty) {
+                      parts.add(f.email!);
+                    }
                     return ListTile(
                       title: Text(f.nome),
-                      subtitle: Text(
-                        [
-                          if (f.telefone != null && f.telefone!.isNotEmpty)
-                            f.telefone!,
-                          if (f.email != null && f.email!.isNotEmpty) f.email!,
-                        ].join(' • '),
+                      subtitle: parts.isEmpty ? null : Text(parts.join(' - ')),
+                      onTap: () => _openFornecedorDialog(fornecedor: f),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Editar fornecedor',
+                        onPressed: () => _openFornecedorDialog(fornecedor: f),
                       ),
                     );
                   },

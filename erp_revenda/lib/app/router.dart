@@ -18,6 +18,21 @@ import '../features/vendas/presentation/pedido_detalhe_screen.dart';
 import '../features/vendas/presentation/checkout_pedido_screen.dart';
 
 import '../features/financeiro/financeiro_screen.dart';
+import '../features/financeiro/contas_pagar/presentation/conta_pagar_form_screen.dart';
+import '../features/financeiro/contas_receber/presentation/contas_receber_screen.dart';
+import '../features/entradas/presentation/entradas_screen.dart';
+import '../features/entradas/presentation/entrada_form_screen.dart';
+import '../features/entradas/presentation/entrada_detalhe_screen.dart';
+import '../features/entradas/presentation/entrada_contas_pagar_screen.dart';
+import '../features/kits/presentation/kits_screen.dart';
+import '../features/kits/presentation/kit_form_screen.dart';
+import '../features/settings/presentation/backup_screen.dart';
+import '../features/settings/presentation/metas_screen.dart';
+import '../features/relatorios/presentation/relatorios_screen.dart';
+import '../features/relatorios/presentation/relatorio_contas_pagar_screen.dart';
+import '../features/relatorios/presentation/relatorio_contas_receber_screen.dart';
+import '../features/relatorios/presentation/relatorio_vendas_screen.dart';
+import '../features/relatorios/presentation/relatorio_produtos_screen.dart';
 
 import '../features/formas_pagamento/presentation/formas_pagamento_screen.dart';
 import '../features/formas_pagamento/presentation/forma_pagamento_form_screen.dart';
@@ -111,6 +126,96 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/financeiro',
         builder: (context, state) => const FinanceiroScreen(),
+      ),
+      GoRoute(
+        path: '/financeiro/contas-pagar/form',
+        builder: (context, state) => const ContaPagarFormScreen(),
+      ),
+      GoRoute(
+        path: '/financeiro/contas-receber',
+        builder: (context, state) => const ContasReceberScreen(),
+      ),
+
+      // Entradas
+      GoRoute(
+        path: '/entradas',
+        builder: (context, state) => const EntradasScreen(),
+      ),
+      GoRoute(
+        path: '/entradas/form',
+        builder: (context, state) {
+          final extra = state.extra;
+          return EntradaFormScreen(entradaId: extra is int ? extra : null);
+        },
+      ),
+      GoRoute(
+        path: '/entradas/:id',
+        builder: (context, state) {
+          final idStr = state.pathParameters['id'];
+          final id = int.tryParse(idStr ?? '');
+          if (id == null) return const MainShellScreen();
+          return EntradaDetalheScreen(entradaId: id);
+        },
+      ),
+      GoRoute(
+        path: '/entradas/:id/contas-pagar',
+        builder: (context, state) {
+          final idStr = state.pathParameters['id'];
+          final id = int.tryParse(idStr ?? '');
+          if (id == null) return const MainShellScreen();
+          return EntradaContasPagarScreen(entradaId: id);
+        },
+      ),
+
+      // Kits
+      GoRoute(
+        path: '/kits',
+        builder: (context, state) => const KitsScreen(),
+      ),
+      GoRoute(
+        path: '/kits/form',
+        builder: (context, state) {
+          final extra = state.extra;
+          return KitFormScreen(kitId: extra is int ? extra : null);
+        },
+      ),
+
+      // Settings / Backup
+      GoRoute(
+        path: '/settings/backup',
+        builder: (context, state) => const BackupScreen(),
+      ),
+      GoRoute(
+        path: '/settings/metas',
+        builder: (context, state) => const MetasScreen(),
+      ),
+
+      // Relatorios
+      GoRoute(
+        path: '/relatorios',
+        builder: (context, state) => const RelatoriosScreen(),
+      ),
+      GoRoute(
+        path: '/relatorios/financeiro/pagar',
+        builder: (context, state) => const RelatorioContasPagarScreen(),
+      ),
+      GoRoute(
+        path: '/relatorios/financeiro/receber',
+        builder: (context, state) {
+          final extra = state.extra;
+          final args = extra is RelatorioContasReceberArgs
+              ? extra
+              : const RelatorioContasReceberArgs();
+          return RelatorioContasReceberScreen(args: args);
+        },
+      ),
+      GoRoute(
+        path: '/relatorios/faturamento/vendas',
+        builder: (context, state) => const RelatorioVendasScreen(),
+      ),
+      GoRoute(
+        path: '/relatorios/faturamento/produtos',
+        builder: (context, state) => const RelatorioProdutosScreen(),
       ),
     ],
   );

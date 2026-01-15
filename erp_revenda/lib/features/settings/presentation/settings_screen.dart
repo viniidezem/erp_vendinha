@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../app/ui/app_colors.dart';
 
@@ -12,7 +13,7 @@ class SettingsScreen extends StatelessWidget {
       showBack: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: const [
+        children: [
           _SettingTile(
             icon: Icons.person_outline,
             title: 'Perfil',
@@ -22,7 +23,15 @@ class SettingsScreen extends StatelessWidget {
           _SettingTile(
             icon: Icons.backup_outlined,
             title: 'Backup',
-            subtitle: 'Exportar / importar dados por e-mail',
+            subtitle: 'Exportar / importar backup (.db)',
+            onTap: () => context.push('/settings/backup'),
+          ),
+          const SizedBox(height: 10),
+          _SettingTile(
+            icon: Icons.flag_outlined,
+            title: 'Metas',
+            subtitle: 'Faturamento e graficos',
+            onTap: () => context.push('/settings/metas'),
           ),
           SizedBox(height: 10),
           _SettingTile(
@@ -46,11 +55,13 @@ class _SettingTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback? onTap;
 
   const _SettingTile({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   @override
@@ -67,6 +78,7 @@ class _SettingTile extends StatelessWidget {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle),
         trailing: Icon(Icons.chevron_right, color: AppColors.textMuted),
+        onTap: onTap,
       ),
     );
   }

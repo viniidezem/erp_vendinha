@@ -338,40 +338,6 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Resumo financeiro',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Total: R\$ ${totalFinal.toStringAsFixed(2)}'),
-                  const SizedBox(height: 4),
-                  Text('Parcelas: ${_parcelas}x'),
-                  if (parcelasValores.isNotEmpty) ...[
-                    const Divider(height: 24),
-                    for (var i = 0; i < parcelasValores.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          _permiteInformarVencimento &&
-                                  i < _vencimentos.length &&
-                                  _vencimentos[i] != null
-                              ? 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)} - vence ${_fmtDateOnly(_vencimentos[i]!)}'
-                              : 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)}',
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
                     'Pagamento',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
@@ -612,6 +578,73 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
             ),
           ),
 
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Resumo financeiro',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Itens:'),
+                  const SizedBox(height: 6),
+                  const _ResumoHeaderRow(),
+                  const Divider(height: 16),
+                  for (final it in widget.args.itens) _ResumoItemRow(item: it),
+                  const Divider(height: 20),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Total Itens')),
+                      Text('R\$ ${subtotal.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Desconto')),
+                      Text('R\$ ${descontoAplicado.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Total Final',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      Text(
+                        'R\$ ${totalFinal.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text('Parcelas: ${_parcelas}x'),
+                  if (parcelasValores.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    for (var i = 0; i < parcelasValores.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          _permiteInformarVencimento &&
+                                  i < _vencimentos.length &&
+                                  _vencimentos[i] != null
+                              ? 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)} - vence ${_fmtDateOnly(_vencimentos[i]!)}'
+                              : 'Parcela ${i + 1}: R\$ ${parcelasValores[i].toStringAsFixed(2)}',
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
           const SizedBox(height: 14),
           ElevatedButton.icon(
             onPressed: _salvar,
@@ -622,6 +655,55 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
             ),
           ),
           const SizedBox(height: 18),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResumoHeaderRow extends StatelessWidget {
+  const _ResumoHeaderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    const headerStyle = TextStyle(fontWeight: FontWeight.w700, fontSize: 12);
+
+    return Row(
+      children: const [
+        Expanded(child: Text('Produto', style: headerStyle)),
+        SizedBox(width: 60, child: Text('QTD', textAlign: TextAlign.right, style: headerStyle)),
+        SizedBox(width: 90, child: Text('Valor', textAlign: TextAlign.right, style: headerStyle)),
+      ],
+    );
+  }
+}
+
+class _ResumoItemRow extends StatelessWidget {
+  final VendaItem item;
+
+  const _ResumoItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(item.produtoNome)),
+          SizedBox(
+            width: 60,
+            child: Text(
+              item.qtd.toStringAsFixed(2),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          SizedBox(
+            width: 90,
+            child: Text(
+              'R\$ ${item.subtotal.toStringAsFixed(2)}',
+              textAlign: TextAlign.right,
+            ),
+          ),
         ],
       ),
     );

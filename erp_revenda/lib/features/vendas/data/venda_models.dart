@@ -162,9 +162,10 @@ class VendaItem {
   final int? id;
   final int? vendaId;
   final int produtoId;
-  final String produtoNome; // para UI (não precisa persistir)
+  final String produtoNome; // para UI (nao precisa persistir)
   final double qtd;
   final double precoUnit;
+  final bool isKit;
 
   VendaItem({
     this.id,
@@ -173,6 +174,7 @@ class VendaItem {
     required this.produtoNome,
     required this.qtd,
     required this.precoUnit,
+    this.isKit = false,
   });
 
   double get subtotal => qtd * precoUnit;
