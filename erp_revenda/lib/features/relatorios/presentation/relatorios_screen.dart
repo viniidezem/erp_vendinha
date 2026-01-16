@@ -32,6 +32,13 @@ class RelatoriosScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _ReportTile(
+            icon: Icons.ssid_chart_outlined,
+            title: 'Fluxo de caixa',
+            subtitle: 'Entradas e saidas previstas',
+            onTap: () => context.push('/relatorios/financeiro/fluxo-caixa'),
+          ),
+          const SizedBox(height: 10),
+          _ReportTile(
             icon: Icons.warning_amber_outlined,
             title: 'Prestes a vencer',
             subtitle: 'Clientes e vencimentos',

@@ -161,4 +161,18 @@ class VendaEmAndamentoController extends Notifier<List<VendaItem>> {
 
     state = novo;
   }
+
+  void carregarItens(List<VendaItem> itens) {
+    state = itens
+        .map(
+          (it) => VendaItem(
+            produtoId: it.produtoId,
+            produtoNome: it.produtoNome,
+            qtd: it.qtd,
+            precoUnit: it.precoUnit,
+            isKit: it.isKit,
+          ),
+        )
+        .toList();
+  }
 }

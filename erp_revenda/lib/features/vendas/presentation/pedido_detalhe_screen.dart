@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../app/ui/app_colors.dart';
 import '../../../shared/widgets/app_page.dart';
@@ -43,6 +46,80 @@ class PedidoDetalheScreen extends ConsumerWidget {
       default:
         return AppColors.primary;
     }
+  }
+
+  String _formatEndereco(ClienteEndereco endereco) {
+    final rotulo = (endereco.rotulo ?? '').trim();
+    final prefix = rotulo.isEmpty ? 'Endereco' : rotulo;
+    final resumo = endereco.resumo().trim();
+    if (resumo.isEmpty) return prefix;
+    return '$prefix - $resumo';
+  }
+
+  String _buildResumoText(
+    PedidoDetalhe detalhe, {
+    String? endereco,
+    String? pagamento,
+  }) {
+    final venda = detalhe.venda;
+    final buffer = StringBuffer();
+    buffer.writeln('Pedido #$vendaId');
+    if ((venda.clienteNome ?? '').trim().isNotEmpty) {
+      buffer.writeln('Cliente: ${venda.clienteNome!.trim()}');
+    }
+    buffer.writeln('Status: ${VendaStatus.label(venda.status)}');
+    buffer.writeln('Total: R\$ ${venda.total.toStringAsFixed(2)}');
+    if (venda.descontoValor > 0) {
+      buffer.writeln('Desconto: R\$ ${venda.descontoValor.toStringAsFixed(2)}');
+    }
+    buffer.writeln('Itens:');
+    for (final item in detalhe.itens) {
+      buffer.writeln(
+        '- ${item.produtoNome} x${item.qtd.toStringAsFixed(2)} '
+        '= R\$ ${item.subtotal.toStringAsFixed(2)}',
+      );
+    }
+    if ((pagamento ?? '').trim().isNotEmpty) {
+      buffer.writeln('Pagamento: ${pagamento!.trim()}');
+    }
+    if ((endereco ?? '').trim().isNotEmpty) {
+      buffer.writeln('Endereco: ${endereco!.trim()}');
+    }
+    return buffer.toString().trim();
+  }
+
+  Future<void> _copiarEndereco(BuildContext context, String endereco) async {
+    await Clipboard.setData(ClipboardData(text: endereco));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Endereco copiado.')),
+    );
+  }
+
+  Future<void> _compartilharResumo(
+    BuildContext context,
+    PedidoDetalhe detalhe, {
+    String? endereco,
+    String? pagamento,
+  }) async {
+    final texto = _buildResumoText(
+      detalhe,
+      endereco: endereco,
+      pagamento: pagamento,
+    );
+    await Share.share(texto);
+  }
+
+  Future<void> _duplicarPedido(
+    BuildContext context,
+    WidgetRef ref,
+    PedidoDetalhe detalhe,
+  ) async {
+    ref.read(vendaEmAndamentoProvider.notifier).carregarItens(detalhe.itens);
+    ref.read(vendaClienteSelecionadoIdProvider.notifier).state =
+        detalhe.venda.clienteId;
+    if (!context.mounted) return;
+    context.push('/vendas/nova');
   }
 
   Future<void> _selecionarStatus(
@@ -127,7 +204,7 @@ class PedidoDetalheScreen extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('NÇœo'),
+              child: const Text('Não'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -155,55 +232,6 @@ class PedidoDetalheScreen extends ConsumerWidget {
     }
   }
 
-  List<_StatusAction> _acoesPara(String status) {
-    // Fluxo sugerido (não rígido). Sempre permite cancelar.
-    if (status == VendaStatus.pedido) {
-      return const [
-        _StatusAction(VendaStatus.aguardandoPagamento, Icons.payments_outlined),
-        _StatusAction(VendaStatus.pagamentoEfetuado, Icons.verified_outlined),
-        _StatusAction(VendaStatus.aguardandoMercadoria, Icons.inventory_2_outlined),
-        _StatusAction(VendaStatus.emExpedicao, Icons.local_shipping_outlined),
-        _StatusAction(VendaStatus.entregue, Icons.check_circle_outline),
-        _StatusAction(VendaStatus.finalizado, Icons.flag_outlined),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    if (status == VendaStatus.aguardandoPagamento) {
-      return const [
-        _StatusAction(VendaStatus.pagamentoEfetuado, Icons.verified_outlined),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    if (status == VendaStatus.pagamentoEfetuado) {
-      return const [
-        _StatusAction(VendaStatus.aguardandoMercadoria, Icons.inventory_2_outlined),
-        _StatusAction(VendaStatus.emExpedicao, Icons.local_shipping_outlined),
-        _StatusAction(VendaStatus.entregue, Icons.check_circle_outline),
-        _StatusAction(VendaStatus.finalizado, Icons.flag_outlined),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    if (status == VendaStatus.aguardandoMercadoria) {
-      return const [
-        _StatusAction(VendaStatus.emExpedicao, Icons.local_shipping_outlined),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    if (status == VendaStatus.emExpedicao) {
-      return const [
-        _StatusAction(VendaStatus.entregue, Icons.check_circle_outline),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    if (status == VendaStatus.entregue) {
-      return const [
-        _StatusAction(VendaStatus.finalizado, Icons.flag_outlined),
-        _StatusAction(VendaStatus.cancelada, Icons.cancel_outlined),
-      ];
-    }
-    return const [];
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detalheAsync = ref.watch(pedidoDetalheProvider(vendaId));
@@ -219,7 +247,6 @@ class PedidoDetalheScreen extends ConsumerWidget {
         ),
         data: (detalhe) {
           final venda = detalhe.venda;
-          final actions = _acoesPara(venda.status);
           final subtotal = detalhe.itens.fold<double>(0, (s, i) => s + i.subtotal);
           final desconto = venda.descontoValor;
           final parcelas = venda.parcelas ?? 1;
@@ -229,6 +256,40 @@ class PedidoDetalheScreen extends ConsumerWidget {
           final enderecosAsync = (venda.clienteId == null)
               ? const AsyncValue.data(<ClienteEndereco>[]) // evita null
               : ref.watch(clienteEnderecosProvider(venda.clienteId!));
+          final enderecos = enderecosAsync.valueOrNull ?? const <ClienteEndereco>[];
+          ClienteEndereco? enderecoSelecionado;
+          String? enderecoTexto;
+          if (venda.entregaTipo == VendaEntregaTipo.entrega &&
+              venda.enderecoEntregaId != null) {
+            try {
+              enderecoSelecionado = enderecos.firstWhere(
+                (e) => e.id == venda.enderecoEntregaId,
+              );
+              enderecoTexto = _formatEndereco(enderecoSelecionado);
+            } catch (_) {
+              enderecoSelecionado = null;
+            }
+          }
+          final formas = formasAsync.valueOrNull ?? const <FormaPagamento>[];
+          FormaPagamento? formaSelecionada;
+          if (venda.formaPagamentoId != null) {
+            try {
+              formaSelecionada = formas.firstWhere(
+                (f) => f.id == venda.formaPagamentoId,
+              );
+            } catch (_) {
+              formaSelecionada = null;
+            }
+          }
+          String? pagamentoTexto;
+          if (formaSelecionada != null) {
+            pagamentoTexto = formaSelecionada.nome;
+          } else if (venda.formaPagamentoId != null) {
+            pagamentoTexto = 'Forma #${venda.formaPagamentoId}';
+          }
+          if (pagamentoTexto != null && (venda.parcelas ?? 0) > 1) {
+            pagamentoTexto = '$pagamentoTexto - ${venda.parcelas}x';
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(12),
@@ -267,6 +328,12 @@ class PedidoDetalheScreen extends ConsumerWidget {
                               ),
                               icon: const Icon(Icons.edit_outlined),
                               label: const Text('Alterar status'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () =>
+                                  _duplicarPedido(context, ref, detalhe),
+                              icon: const Icon(Icons.copy_all_outlined),
+                              label: const Text('Duplicar pedido'),
                             ),
                           ],
                         ),
@@ -337,6 +404,34 @@ class PedidoDetalheScreen extends ConsumerWidget {
                             );
                           },
                         ),
+
+                        const Divider(height: 24),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            TextButton.icon(
+                              onPressed: enderecoTexto == null
+                                  ? null
+                                  : () => _copiarEndereco(
+                                        context,
+                                        enderecoTexto!,
+                                      ),
+                              icon: const Icon(Icons.copy_outlined),
+                              label: const Text('Copiar endereco'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _compartilharResumo(
+                                context,
+                                detalhe,
+                                endereco: enderecoTexto,
+                                pagamento: pagamentoTexto,
+                              ),
+                              icon: const Icon(Icons.share_outlined),
+                              label: const Text('Compartilhar resumo'),
+                            ),
+                          ],
+                        ),
                         if ((venda.observacao ?? '').trim().isNotEmpty) ...[
                           const Divider(height: 24),
                           Text('Observação: ${venda.observacao!.trim()}'),
@@ -345,31 +440,6 @@ class PedidoDetalheScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                if (actions.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final a in actions)
-                            ElevatedButton.icon(
-                              onPressed: () => _mudarStatus(
-                                context,
-                                ref,
-                                novoStatus: a.status,
-                              ),
-                              icon: Icon(a.icon),
-                              label: Text(VendaStatus.label(a.status)),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: 12),
                 Card(
@@ -552,12 +622,6 @@ class _ResumoItemRow extends StatelessWidget {
   }
 }
 
-class _StatusAction {
-  final String status;
-  final IconData icon;
-
-  const _StatusAction(this.status, this.icon);
-}
 
 class _StatusPill extends StatelessWidget {
   final String status;

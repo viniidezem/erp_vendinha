@@ -87,7 +87,7 @@ class VendaStatus {
     emExpedicao,
   ];
 
-  /// Status mostrados em filtros/seletores padrÇœo.
+  /// Status mostrados em filtros/seletores padrão.
   static const List<String> filtros = fluxoOperacional;
 
   static bool isAberto(String status) => abertos.contains(status);

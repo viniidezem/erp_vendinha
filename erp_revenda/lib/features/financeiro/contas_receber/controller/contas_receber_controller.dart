@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../clientes/controller/clientes_controller.dart' show appDatabaseProvider;
+import '../../../vendas/controller/vendas_controller.dart'
+    show vendasRepositoryProvider;
 import '../data/conta_receber_model.dart';
 import '../data/conta_receber_repository.dart';
 
@@ -37,12 +39,21 @@ class ContasReceberController extends AsyncNotifier<List<ContaReceber>> {
     required int id,
     required String status,
     double? valorRecebido,
+    int? vendaId,
   }) async {
     await _repo.atualizarStatus(
       id: id,
       status: status,
       valorRecebido: valorRecebido,
     );
+
+    if (vendaId != null && status == ContaReceberStatus.recebida) {
+      final ok = await _repo.todasRecebidas(vendaId);
+      if (ok) {
+        final vendasRepo = ref.read(vendasRepositoryProvider);
+        await vendasRepo.marcarPagamentoEfetuadoSePossivel(vendaId);
+      }
+    }
     await refresh();
   }
 }

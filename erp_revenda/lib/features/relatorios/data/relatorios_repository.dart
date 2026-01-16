@@ -397,4 +397,103 @@ class RelatoriosRepository {
       porValor: mapRows(valorRows),
     );
   }
+
+  Future<RelatorioFluxoCaixaResumo> fluxoCaixaResumo({
+    required DateTime inicio,
+    required DateTime fim,
+    required bool agruparPorMes,
+  }) async {
+    final db = await _db.database;
+    final inicioMs = inicio.millisecondsSinceEpoch;
+    final fimMs = fim.millisecondsSinceEpoch;
+    final format = agruparPorMes ? '%Y-%m' : '%Y-%m-%d';
+
+    final receberRows = await db.rawQuery(
+      '''
+      SELECT
+        strftime('$format', datetime(COALESCE(cr.vencimento_at, cr.created_at) / 1000, 'unixepoch')) AS periodo,
+        SUM(
+          CASE
+            WHEN cr.status = '${ContaReceberStatus.cancelada}' THEN 0
+            WHEN cr.status = '${ContaReceberStatus.recebida}' THEN cr.valor_recebido
+            ELSE cr.valor
+          END
+        ) AS total
+      FROM contas_receber cr
+      WHERE COALESCE(cr.vencimento_at, cr.created_at) BETWEEN ? AND ?
+      GROUP BY periodo
+      ORDER BY periodo ASC
+      ''',
+      [inicioMs, fimMs],
+    );
+
+    final pagarRows = await db.rawQuery(
+      '''
+      SELECT
+        strftime('$format', datetime(COALESCE(cp.vencimento_at, cp.created_at) / 1000, 'unixepoch')) AS periodo,
+        SUM(
+          CASE
+            WHEN cp.status = '${ContaPagarStatus.cancelada}' THEN 0
+            ELSE cp.valor
+          END
+        ) AS total
+      FROM contas_pagar cp
+      WHERE COALESCE(cp.vencimento_at, cp.created_at) BETWEEN ? AND ?
+      GROUP BY periodo
+      ORDER BY periodo ASC
+      ''',
+      [inicioMs, fimMs],
+    );
+
+    final entradas = <String, double>{};
+    for (final row in receberRows) {
+      final key = row['periodo'] as String?;
+      if (key == null) continue;
+      entradas[key] = (row['total'] as num?)?.toDouble() ?? 0;
+    }
+
+    final saidas = <String, double>{};
+    for (final row in pagarRows) {
+      final key = row['periodo'] as String?;
+      if (key == null) continue;
+      saidas[key] = (row['total'] as num?)?.toDouble() ?? 0;
+    }
+
+    final keys = {...entradas.keys, ...saidas.keys}.toList()
+      ..sort();
+
+    DateTime parsePeriodo(String value) {
+      final parts = value.split('-');
+      final year = int.tryParse(parts[0]) ?? 1970;
+      final month = parts.length > 1 ? int.tryParse(parts[1]) ?? 1 : 1;
+      final day = parts.length > 2 ? int.tryParse(parts[2]) ?? 1 : 1;
+      return DateTime(year, month, day);
+    }
+
+    final itens = <RelatorioFluxoCaixaItem>[];
+    double totalEntradas = 0;
+    double totalSaidas = 0;
+
+    for (final key in keys) {
+      final entradasVal = entradas[key] ?? 0;
+      final saidasVal = saidas[key] ?? 0;
+      totalEntradas += entradasVal;
+      totalSaidas += saidasVal;
+      itens.add(
+        RelatorioFluxoCaixaItem(
+          data: parsePeriodo(key),
+          entradas: entradasVal,
+          saidas: saidasVal,
+          saldo: entradasVal - saidasVal,
+        ),
+      );
+    }
+
+    return RelatorioFluxoCaixaResumo(
+      totalEntradas: totalEntradas,
+      totalSaidas: totalSaidas,
+      saldo: totalEntradas - totalSaidas,
+      itens: itens,
+    );
+  }
 }

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/ui/app_colors.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../controller/clientes_controller.dart';
 
@@ -40,6 +42,28 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     _debounce = Timer(const Duration(milliseconds: 250), () {
       ref.read(clientesSearchProvider.notifier).state = v.trim();
     });
+  }
+
+  String _normalizePhone(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    return digits;
+  }
+
+  Future<void> _openWhatsApp(String? phone) async {
+    final value = (phone ?? '').trim();
+    if (value.isEmpty) return;
+    final digits = _normalizePhone(value);
+    if (digits.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$digits');
+    final ok = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel abrir o WhatsApp.')),
+      );
+    }
   }
 
   @override
@@ -119,14 +143,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                     itemBuilder: (context, i) {
                       final c = clientes[i];
 
+                      final telefone = (c.telefone ?? '').trim();
+                      final hasPhone = telefone.isNotEmpty;
+                      final showWhatsBadge = c.telefoneWhatsapp;
+                      final canOpenWhats = c.telefoneWhatsapp && hasPhone;
+
                       final subtitleParts = <String>[];
                       if ((c.apelido ?? '').trim().isNotEmpty) {
                         subtitleParts.add('Apelido: ${c.apelido}');
                       }
-                      if ((c.telefone ?? '').trim().isNotEmpty) {
-                        subtitleParts.add(
-                          'Tel: ${c.telefone}${c.telefoneWhatsapp ? " (WhatsApp)" : ""}',
-                        );
+                      if (hasPhone) {
+                        subtitleParts.add('Tel: ${c.telefone}');
                       }
                       if ((c.cpf ?? '').trim().isNotEmpty) {
                         subtitleParts.add('CPF: ${c.cpf}');
@@ -139,14 +166,36 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          subtitle: subtitleParts.isEmpty
+                          subtitle: (subtitleParts.isEmpty && !showWhatsBadge)
                               ? null
-                              : Text(
-                                  subtitleParts.join(' • '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (subtitleParts.isNotEmpty)
+                                      Text(
+                                        subtitleParts.join(' - '),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    if (showWhatsBadge) ...[
+                                      const SizedBox(height: 4),
+                                      const _WhatsBadge(),
+                                    ],
+                                  ],
                                 ),
-                          trailing: Chip(label: Text(c.status.label)),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (canOpenWhats)
+                                IconButton(
+                                  tooltip: 'WhatsApp',
+                                  icon: const Icon(Icons.chat_bubble_outline),
+                                  onPressed: () => _openWhatsApp(telefone),
+                                ),
+                              Chip(label: Text(c.status.label)),
+                            ],
+                          ),
+
                           onTap: () => context.push('/clientes/form', extra: c),
                         ),
                       );
@@ -156,6 +205,30 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WhatsBadge extends StatelessWidget {
+  const _WhatsBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.5)),
+      ),
+      child: const Text(
+        'WhatsApp',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.success,
         ),
       ),
     );

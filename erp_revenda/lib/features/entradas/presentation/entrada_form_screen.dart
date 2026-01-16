@@ -39,6 +39,8 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
   String _status = EntradaStatus.rascunho;
   DateTime _createdAt = DateTime.now();
   List<EntradaItem> _itens = [];
+  bool _submitAttempted = false;
+  bool _confirmAttempted = false;
 
   @override
   void initState() {
@@ -174,6 +176,11 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
       return;
     }
 
+    setState(() {
+      _submitAttempted = true;
+      _confirmAttempted = confirmar;
+    });
+
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -215,6 +222,7 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
             confirmar: confirmar,
             atualizarCusto: _atualizarCusto,
           );
+      ref.invalidate(entradaDetalheProvider(id));
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -264,6 +272,7 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
   @override
   Widget build(BuildContext context) {
     final fornecedoresAsync = ref.watch(entradasFornecedoresProvider);
+    final errorColor = Theme.of(context).colorScheme.error;
 
     return AppPage(
       title: widget.entradaId == null ? 'Nova entrada' : 'Entrada',
@@ -301,9 +310,13 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
                                 );
                               }
                               return InputDecorator(
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Fornecedor',
-                                  border: OutlineInputBorder(),
+                                  border: const OutlineInputBorder(),
+                                  errorText: _submitAttempted &&
+                                          _fornecedorId == null
+                                      ? 'Selecione um fornecedor.'
+                                      : null,
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<int?>(
@@ -426,6 +439,13 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
                             onChanged: (_) {
                               if (_totalNotaAuto) _totalNotaAuto = false;
                             },
+                            validator: (_) {
+                              if (!_confirmAttempted) return null;
+                              if (_totalNota <= 0) {
+                                return 'Informe o total da nota.';
+                              }
+                              return null;
+                            },
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -473,9 +493,16 @@ class _EntradaFormScreenState extends ConsumerState<EntradaFormScreen> {
                             ],
                           ),
                           if (_itens.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text('Nenhum item adicionado.'),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Text(
+                                _submitAttempted
+                                    ? 'Adicione pelo menos um item.'
+                                    : 'Nenhum item adicionado.',
+                                style: _submitAttempted
+                                    ? TextStyle(color: errorColor)
+                                    : null,
+                              ),
                             )
                           else
                             ListView.separated(

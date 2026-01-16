@@ -40,7 +40,9 @@ class ContaReceberRepository {
       SELECT 
         cr.*,
         v.cliente_id,
-        c.nome AS cliente_nome
+        c.nome AS cliente_nome,
+        c.telefone AS cliente_telefone,
+        c.telefone_whatsapp AS cliente_whatsapp
       FROM contas_receber cr
       LEFT JOIN vendas v ON v.id = cr.venda_id
       LEFT JOIN clientes c ON c.id = v.cliente_id
@@ -71,5 +73,23 @@ class ContaReceberRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<bool> todasRecebidas(int vendaId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        COUNT(1) AS total,
+        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS recebidas
+      FROM contas_receber
+      WHERE venda_id = ?
+      ''',
+      [ContaReceberStatus.recebida, vendaId],
+    );
+    if (rows.isEmpty) return false;
+    final total = (rows.first['total'] as num?)?.toInt() ?? 0;
+    final recebidas = (rows.first['recebidas'] as num?)?.toInt() ?? 0;
+    return total > 0 && total == recebidas;
   }
 }

@@ -9,6 +9,9 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   return DashboardRepository(ref.watch(appDatabaseProvider));
 });
 
+final dashboardResumoPeriodoProvider =
+    StateProvider<String>((ref) => DashboardResumoPeriodo.hoje);
+
 final dashboardControllerProvider =
     AsyncNotifierProvider<DashboardController, DashboardResumo>(DashboardController.new);
 
@@ -23,11 +26,13 @@ class DashboardController extends AsyncNotifier<DashboardResumo> {
 
   @override
   Future<DashboardResumo> build() async {
-    return _repo.carregarResumo();
+    final periodo = ref.watch(dashboardResumoPeriodoProvider);
+    return _repo.carregarResumo(periodoVendas: periodo);
   }
 
   Future<void> refresh() async {
+    final periodo = ref.read(dashboardResumoPeriodoProvider);
     state = const AsyncLoading();
-    state = AsyncData(await _repo.carregarResumo());
+    state = AsyncData(await _repo.carregarResumo(periodoVendas: periodo));
   }
 }

@@ -97,7 +97,7 @@ class CadastrosHubScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           _SectionTitle('Financeiro'),
           const SizedBox(height: 12),
-                    _HubCard(
+          _HubCard(
             icon: Icons.payments_outlined,
             title: 'Formas de pagamento',
             subtitle: 'Desconto • Parcelamento',
@@ -106,15 +106,6 @@ class CadastrosHubScreen extends ConsumerWidget {
                 : '${resumo!.formasPagamentoAtivas}/${resumo!.formasPagamentoTotal} ativas',
             onTap: () => context.push('/formas-pagamento'),
             onNew: () => context.push('/formas-pagamento/form'),
-          ),
-          const SizedBox(height: 12),
-
-_HubCard(
-            icon: Icons.account_balance_wallet_outlined,
-            title: 'Contas a pagar/receber',
-            subtitle: 'Lançamentos e visão geral',
-            countText: null,
-            onTap: () => context.push('/financeiro'),
           ),
           const SizedBox(height: 16),
           // Atualização manual (útil após criar itens)

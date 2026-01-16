@@ -16,10 +16,11 @@ class SettingsScreen extends StatelessWidget {
         children: [
           _SettingTile(
             icon: Icons.person_outline,
-            title: 'Perfil',
+            title: 'Segurança',
             subtitle: 'Dados do usuário e PIN',
+            onTap: () => context.push('/settings/pin'),
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           _SettingTile(
             icon: Icons.backup_outlined,
             title: 'Backup',
@@ -30,16 +31,17 @@ class SettingsScreen extends StatelessWidget {
           _SettingTile(
             icon: Icons.flag_outlined,
             title: 'Metas',
-            subtitle: 'Faturamento e graficos',
+            subtitle: 'Faturamento e gráficos',
             onTap: () => context.push('/settings/metas'),
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           _SettingTile(
             icon: Icons.palette_outlined,
             title: 'Aparência',
-            subtitle: 'Tema e preferências',
+            subtitle: 'Cores e nome da loja',
+            onTap: () => context.push('/settings/aparencia'),
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           _SettingTile(
             icon: Icons.info_outline,
             title: 'Sobre',

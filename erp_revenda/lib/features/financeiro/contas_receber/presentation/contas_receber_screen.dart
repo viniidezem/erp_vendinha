@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/ui/app_colors.dart';
 import '../../../../shared/widgets/app_error_dialog.dart';
 import '../../../../shared/widgets/app_page.dart';
+import '../../../settings/controller/app_preferences_controller.dart';
 import '../controller/contas_receber_controller.dart';
 import '../data/conta_receber_model.dart';
+import '../../../vendas/controller/vendas_controller.dart';
+import '../../../vendas/data/venda_models.dart';
 
 class ContasReceberScreen extends ConsumerStatefulWidget {
   const ContasReceberScreen({super.key});
@@ -45,6 +49,171 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
     return '${two(dt.day)}/${two(dt.month)}/${dt.year}';
   }
 
+  DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool _venceAmanha(DateTime? vencimento) {
+    if (vencimento == null) return false;
+    final now = DateTime.now();
+    final tomorrow = _startOfDay(now).add(const Duration(days: 1));
+    return _startOfDay(vencimento) == tomorrow;
+  }
+
+  bool _podeLembrar(ContaReceber conta) {
+    final hasPhone = (conta.clienteTelefone ?? '').trim().isNotEmpty;
+    return conta.status == ContaReceberStatus.aberta &&
+        conta.clienteWhatsApp &&
+        hasPhone &&
+        _venceAmanha(conta.vencimentoAt);
+  }
+
+  String _normalizePhone(String value) {
+    return value.replaceAll(RegExp(r'\D'), '');
+  }
+
+  String _buildMensagem(
+    ContaReceber conta,
+    PedidoDetalhe detalhe, {
+    String? storeName,
+  }) {
+    final cliente = (conta.clienteNome ?? '').trim();
+    final loja = (storeName ?? '').trim();
+    final venc = conta.vencimentoAt != null ? _fmtDateOnly(conta.vencimentoAt!) : '';
+    final lines = <String>[];
+
+    if (cliente.isNotEmpty && loja.isNotEmpty) {
+      lines.add('Ola $cliente, aqui e $loja.');
+    } else if (cliente.isNotEmpty) {
+      lines.add('Ola $cliente.');
+    } else if (loja.isNotEmpty) {
+      lines.add('Ola! Aqui e $loja.');
+    } else {
+      lines.add('Ola!');
+    }
+
+    lines.add(
+      'Lembrete: sua parcela ${conta.parcelaNumero}/${conta.parcelasTotal} '
+      'do pedido #${conta.vendaId} vence em ${venc.isEmpty ? 'breve' : venc}.',
+    );
+    lines.add('Valor da parcela: R\$ ${conta.valor.toStringAsFixed(2)}.');
+    lines.add('Resumo do pedido:');
+    for (final item in detalhe.itens) {
+      lines.add(
+        '- ${item.produtoNome} x${item.qtd.toStringAsFixed(2)} '
+        '(R\$ ${item.subtotal.toStringAsFixed(2)})',
+      );
+    }
+    lines.add('Total do pedido: R\$ ${detalhe.total.toStringAsFixed(2)}.');
+
+    return lines.join('\n');
+  }
+
+  Future<void> _enviarWhatsapp(
+    ContaReceber conta,
+    String? storeName,
+  ) async {
+    final telefone = (conta.clienteTelefone ?? '').trim();
+    final digits = _normalizePhone(telefone);
+    if (digits.isEmpty) {
+      if (!mounted) return;
+      await showErrorDialog(context, 'Cliente sem telefone valido.');
+      return;
+    }
+    if (!conta.clienteWhatsApp) {
+      if (!mounted) return;
+      await showErrorDialog(context, 'Telefone nao marcado como WhatsApp.');
+      return;
+    }
+    final repo = ref.read(vendasRepositoryProvider);
+    PedidoDetalhe detalhe;
+    try {
+      detalhe = await repo.carregarPedidoDetalhe(conta.vendaId);
+    } catch (e) {
+      if (!mounted) return;
+      await showErrorDialog(context, 'Erro ao carregar pedido:\n$e');
+      return;
+    }
+    if (!mounted) return;
+
+    final texto = _buildMensagem(
+      conta,
+      detalhe,
+      storeName: storeName,
+    );
+    final uri = Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(texto)}');
+    final ok = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nao foi possivel abrir o WhatsApp.')),
+      );
+    }
+  }
+
+  Future<void> _mostrarLembretesAmanha(
+    List<ContaReceber> contas,
+    String? storeName,
+  ) async {
+    final itens = contas.where(_podeLembrar).toList();
+    if (itens.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhuma parcela vence amanha.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Lembretes para amanha',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Toque em cada cliente para abrir o WhatsApp com a mensagem pronta.',
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: itens.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final conta = itens[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(conta.clienteNome ?? 'Cliente'),
+                      subtitle: Text(
+                        'Pedido #${conta.vendaId} - '
+                        'Parcela ${conta.parcelaNumero}/${conta.parcelasTotal} '
+                        '- R\$ ${conta.valor.toStringAsFixed(2)}',
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _enviarWhatsapp(conta, storeName),
+                        child: const Text('Abrir'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Color _statusColor(ContaReceber conta) {
     if (conta.status == ContaReceberStatus.recebida) return AppColors.success;
     if (conta.status == ContaReceberStatus.cancelada) return AppColors.textMuted;
@@ -67,6 +236,7 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
           .atualizarStatus(
             id: conta.id!,
             status: status,
+            vendaId: conta.vendaId,
             valorRecebido: status == ContaReceberStatus.recebida
                 ? conta.valor
                 : status == ContaReceberStatus.cancelada
@@ -83,6 +253,10 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
   Widget build(BuildContext context) {
     final asyncLista = ref.watch(contasReceberControllerProvider);
     final statusFiltro = ref.watch(contasReceberStatusFiltroProvider);
+    final prefsAsync = ref.watch(appPreferencesProvider);
+    final storeName = prefsAsync.value?.storeName;
+    final listaAtual = asyncLista.asData?.value ?? const <ContaReceber>[];
+    final temLembretes = listaAtual.any(_podeLembrar);
 
     return AppPage(
       title: 'Contas a receber',
@@ -142,12 +316,27 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                TextButton.icon(
-                  onPressed: () => ref
-                      .read(contasReceberControllerProvider.notifier)
-                      .refresh(),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Atualizar'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => ref
+                          .read(contasReceberControllerProvider.notifier)
+                          .refresh(),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Atualizar'),
+                    ),
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: temLembretes ? () => _mostrarLembretesAmanha(
+                                listaAtual,
+                                storeName,
+                              )
+                          : null,
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Lembrar todos'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -168,6 +357,7 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
                     final conta = lista[i];
+                    final podeLembrar = _podeLembrar(conta);
                     final parts = <String>[
                       'Pedido #${conta.vendaId}',
                       'Parcela ${conta.parcelaNumero}/${conta.parcelasTotal}',
@@ -208,16 +398,31 @@ class _ContasReceberScreenState extends ConsumerState<ContasReceberScreen> {
                         ],
                       ),
                       trailing: conta.status == ContaReceberStatus.aberta
-                          ? PopupMenuButton<String>(
-                              onSelected: (v) => _atualizarStatus(conta, v),
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: ContaReceberStatus.recebida,
-                                  child: Text('Marcar como recebida'),
-                                ),
-                                PopupMenuItem(
-                                  value: ContaReceberStatus.cancelada,
-                                  child: Text('Cancelar'),
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (podeLembrar)
+                                  IconButton(
+                                    tooltip: 'Lembrar no WhatsApp',
+                                    icon: Icon(
+                                      Icons.chat_bubble_outline,
+                                      color: AppColors.success,
+                                    ),
+                                    onPressed: () =>
+                                        _enviarWhatsapp(conta, storeName),
+                                  ),
+                                PopupMenuButton<String>(
+                                  onSelected: (v) => _atualizarStatus(conta, v),
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: ContaReceberStatus.recebida,
+                                      child: Text('Marcar como recebida'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: ContaReceberStatus.cancelada,
+                                      child: Text('Cancelar'),
+                                    ),
+                                  ],
                                 ),
                               ],
                             )

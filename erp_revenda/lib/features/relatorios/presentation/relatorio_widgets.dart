@@ -12,6 +12,53 @@ String fmtDate(DateTime dt) {
   return '${two(dt.day)}/${two(dt.month)}/${dt.year}';
 }
 
+class RelatorioPeriodoRapido {
+  static const hoje = 'HOJE';
+  static const ultimos7Dias = 'ULTIMOS_7_DIAS';
+  static const ultimos30Dias = 'ULTIMOS_30_DIAS';
+
+  static const List<String> values = [hoje, ultimos7Dias, ultimos30Dias];
+
+  static String label(String value) {
+    switch (value) {
+      case hoje:
+        return 'Hoje';
+      case ultimos7Dias:
+        return 'Últimos 7 dias';
+      case ultimos30Dias:
+        return 'Últimos 30 dias';
+      default:
+        return value;
+    }
+  }
+}
+
+class RelatorioQuickPeriodChips extends StatelessWidget {
+  final String? value;
+  final ValueChanged<String> onChanged;
+
+  const RelatorioQuickPeriodChips({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      children: RelatorioPeriodoRapido.values.map((p) {
+        final selected = p == value;
+        return ChoiceChip(
+          label: Text(RelatorioPeriodoRapido.label(p)),
+          selected: selected,
+          onSelected: (_) => onChanged(p),
+        );
+      }).toList(),
+    );
+  }
+}
+
 class RelatorioKpiCard extends StatelessWidget {
   final String title;
   final String value;

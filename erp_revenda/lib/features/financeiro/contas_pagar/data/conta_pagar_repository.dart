@@ -61,6 +61,13 @@ class ContaPagarRepository {
       throw ArgumentError('Valor total invalido.');
     }
 
+    if (entradaId != null) {
+      final exists = await existeParaEntrada(entradaId);
+      if (exists) {
+        throw StateError('Contas a pagar ja geradas para esta entrada.');
+      }
+    }
+
     final parcelasSafe = parcelas < 1 ? 1 : parcelas;
     final totalFinal = _round2(total);
     final totalCents = (totalFinal * 100).round();
@@ -92,6 +99,16 @@ class ContaPagarRepository {
         });
       }
     });
+  }
+
+  Future<bool> existeParaEntrada(int entradaId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(1) AS c FROM contas_pagar WHERE entrada_id = ?',
+      [entradaId],
+    );
+    final count = (rows.first['c'] as int?) ?? 0;
+    return count > 0;
   }
 
   Future<void> atualizarStatus({

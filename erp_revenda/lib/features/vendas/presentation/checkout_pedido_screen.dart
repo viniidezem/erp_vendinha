@@ -38,6 +38,7 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
   bool _permiteInformarVencimento = false;
   _DescontoTipo _descontoTipo = _DescontoTipo.valor;
   List<DateTime?> _vencimentos = <DateTime?>[];
+  bool _submitAttempted = false;
 
   final _obsCtrl = TextEditingController();
   final _descontoCtrl = TextEditingController(text: '0.00');
@@ -74,6 +75,16 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
 
     final valor = input.clamp(0.0, total).toDouble();
     return _round2(valor);
+  }
+
+  bool _descontoExcedido(double total) {
+    if (!_permiteDesconto) return false;
+    final input = _parseDescontoInput();
+    if (input <= 0) return false;
+    if (_descontoTipo == _DescontoTipo.percentual) {
+      return input > 100;
+    }
+    return input > total;
   }
 
   double? _descontoPercentualSelecionado() {
@@ -149,6 +160,8 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
   }
 
   Future<void> _salvar() async {
+    setState(() => _submitAttempted = true);
+
     // Captura dependências antes de awaits para evitar warnings de BuildContext em async gaps.
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -225,7 +238,14 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
     final descontoAplicado = _descontoAplicado(subtotal);
     final totalFinal = _round2(subtotal - descontoAplicado);
     final descontoPct = _descontoPercentualSelecionado();
+    final descontoExcedido = _descontoExcedido(subtotal);
     final parcelasValores = _parcelasValores(totalFinal, _parcelas);
+    final enderecoErro = _submitAttempted &&
+        _entregaTipo == VendaEntregaTipo.entrega &&
+        _enderecoId == null;
+    final pagamentoErro =
+        _submitAttempted && _formaPagamentoId == null ? 'Selecione uma forma de pagamento.' : null;
+    final errorColor = Theme.of(context).colorScheme.error;
 
     return AppPage(
       title: 'Checkout',
@@ -240,23 +260,46 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Resumo do pedido',
+                    'Resumo rapido',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  Text('Itens: ${widget.args.itens.length}'),
-                  const SizedBox(height: 4),
-                  Text('Subtotal: R\$ ${subtotal.toStringAsFixed(2)}'),
-                  if (descontoAplicado > 0) ...[
-                    const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ResumoCompactoItem(
+                          label: 'Subtotal',
+                          value: 'R\$ ${subtotal.toStringAsFixed(2)}',
+                        ),
+                      ),
+                      Expanded(
+                        child: _ResumoCompactoItem(
+                          label: 'Desconto',
+                          value: descontoAplicado <= 0
+                              ? 'R\$ 0,00'
+                              : 'R\$ ${descontoAplicado.toStringAsFixed(2)}',
+                          helper: descontoPct == null || descontoAplicado <= 0
+                              ? null
+                              : '${descontoPct.toStringAsFixed(2)}%',
+                        ),
+                      ),
+                      Expanded(
+                        child: _ResumoCompactoItem(
+                          label: 'Total',
+                          value: 'R\$ ${totalFinal.toStringAsFixed(2)}',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Parcelas: ${_parcelas}x'),
+                  if (descontoExcedido) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      descontoPct == null
-                          ? 'Desconto: -R\$ ${descontoAplicado.toStringAsFixed(2)}'
-                          : 'Desconto: -R\$ ${descontoAplicado.toStringAsFixed(2)} (${descontoPct.toStringAsFixed(2)}%)',
+                      'Desconto acima do permitido. Valor ajustado automaticamente.',
+                      style: TextStyle(color: errorColor),
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  Text('Total: R\$ ${totalFinal.toStringAsFixed(2)}'),
                 ],
               ),
             ),
@@ -319,6 +362,14 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                 subtitle: e.resumo(),
                                 selected: _enderecoId == e.id,
                                 onTap: () => setState(() => _enderecoId = e.id),
+                              ),
+                            if (enderecoErro)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  'Selecione um endereço de entrega.',
+                                  style: TextStyle(color: errorColor),
+                                ),
                               ),
                           ],
                         );
@@ -386,9 +437,10 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                       return Column(
                         children: [
                           InputDecorator(
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Forma de pagamento',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
+                              errorText: pagamentoErro,
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<int?>(
@@ -517,6 +569,13 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
                                   : 'Informe o percentual (0 a 100).',
                               onChanged: (_) => setState(() {}),
                             ),
+                            if (descontoExcedido) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Desconto acima do permitido. Valor ajustado automaticamente.',
+                                style: TextStyle(color: errorColor),
+                              ),
+                            ],
                           ],
                           if (formaSel != null && formaSel.permiteInformarVencimento) ...[
                             const SizedBox(height: 12),
@@ -673,6 +732,46 @@ class _ResumoHeaderRow extends StatelessWidget {
         Expanded(child: Text('Produto', style: headerStyle)),
         SizedBox(width: 60, child: Text('QTD', textAlign: TextAlign.right, style: headerStyle)),
         SizedBox(width: 90, child: Text('Valor', textAlign: TextAlign.right, style: headerStyle)),
+      ],
+    );
+  }
+}
+
+class _ResumoCompactoItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? helper;
+
+  const _ResumoCompactoItem({
+    required this.label,
+    required this.value,
+    this.helper,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        if (helper != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            helper!,
+            style: const TextStyle(fontSize: 11),
+          ),
+        ],
       ],
     );
   }

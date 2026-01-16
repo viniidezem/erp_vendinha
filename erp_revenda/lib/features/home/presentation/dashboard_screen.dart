@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/ui/app_colors.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../controller/dashboard_controller.dart';
+import '../../settings/controller/app_preferences_controller.dart';
 import '../data/dashboard_grafico.dart';
 import '../data/dashboard_resumo.dart';
 import '../../settings/controller/dashboard_settings_controller.dart';
@@ -17,9 +18,16 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final resumoAsync = ref.watch(dashboardControllerProvider);
     final settingsAsync = ref.watch(dashboardSettingsProvider);
+    final prefsAsync = ref.watch(appPreferencesProvider);
+    final periodoResumo = ref.watch(dashboardResumoPeriodoProvider);
+
+    final storeName = prefsAsync.value?.storeName;
+    final title = (storeName != null && storeName.trim().isNotEmpty)
+        ? storeName
+        : 'Dashboard';
 
     return AppPage(
-      title: 'Dashboard',
+      title: title,
       showBack: false,
       actions: [
         IconButton(
@@ -27,13 +35,6 @@ class DashboardScreen extends ConsumerWidget {
           onPressed: () => ref.read(dashboardControllerProvider.notifier).refresh(),
           icon: const Icon(Icons.refresh),
           color: Colors.white,
-        ),
-        Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: CircleAvatar(
-            backgroundColor: Colors.white.withValues(alpha: 0.25),
-            child: const Icon(Icons.person, color: Colors.white),
-          ),
         ),
       ],
       child: resumoAsync.when(
@@ -51,6 +52,11 @@ class DashboardScreen extends ConsumerWidget {
             ),
             data: (settings) {
               final showGraficos = settings.mostrarGraficos;
+              final hasAlertas = (r.contasReceberVencidas +
+                      r.contasReceberVencendo +
+                      r.contasPagarVencidas +
+                      r.contasPagarVencendo) >
+                  0;
               return RefreshIndicator(
                 onRefresh: () =>
                     ref.read(dashboardControllerProvider.notifier).refresh(),
@@ -65,21 +71,29 @@ class DashboardScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      _PeriodoResumoChips(
+                        value: periodoResumo,
+                        onChanged: (p) => ref
+                            .read(dashboardResumoPeriodoProvider.notifier)
+                            .state = p,
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
                             child: _KpiCard(
-                              title: 'Vendas hoje',
-                              value: _money(r.vendasHojeTotal),
-                              subtitle: '${r.vendasHojeQtde} venda(s)',
+                              title: 'Vendas no período',
+                              value: _money(r.vendasPeriodoTotal),
+                              subtitle:
+                                  '${DashboardResumoPeriodo.label(periodoResumo)} • ${r.vendasPeriodoQtde} venda(s)',
                               icon: Icons.attach_money,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _KpiCard(
-                              title: 'Vendas no mes',
+                              title: 'Vendas no mês',
                               value: _money(r.vendasMesTotal),
                               subtitle: '${r.vendasMesQtde} venda(s)',
                               icon: Icons.calendar_month_outlined,
@@ -134,6 +148,57 @@ class DashboardScreen extends ConsumerWidget {
                       const SizedBox(height: 22),
                     ] else ...[
                       _GraficosSection(resumo: r, settings: settings),
+                      const SizedBox(height: 22),
+                    ],
+                    if (hasAlertas) ...[
+                      const Text(
+                        'Alertas',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _KpiCard(
+                              title: 'Receber vencidas',
+                              value: r.contasReceberVencidas.toString(),
+                              subtitle: 'Parcelas em atraso',
+                              icon: Icons.warning_amber_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _KpiCard(
+                              title: 'Receber 7 dias',
+                              value: r.contasReceberVencendo.toString(),
+                              subtitle: 'Vencendo em breve',
+                              icon: Icons.schedule_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _KpiCard(
+                              title: 'Pagar vencidas',
+                              value: r.contasPagarVencidas.toString(),
+                              subtitle: 'Contas em atraso',
+                              icon: Icons.error_outline,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _KpiCard(
+                              title: 'Pagar 7 dias',
+                              value: r.contasPagarVencendo.toString(),
+                              subtitle: 'Vencendo em breve',
+                              icon: Icons.event_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 22),
                     ],
                     const Text(
@@ -356,6 +421,31 @@ class _PeriodoChips extends StatelessWidget {
         final selected = p == value;
         return ChoiceChip(
           label: Text(DashboardGraficoPeriodo.label(p)),
+          selected: selected,
+          onSelected: (_) => onChanged(p),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _PeriodoResumoChips extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  const _PeriodoResumoChips({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      children: DashboardResumoPeriodo.values.map((p) {
+        final selected = p == value;
+        return ChoiceChip(
+          label: Text(DashboardResumoPeriodo.label(p)),
           selected: selected,
           onSelected: (_) => onChanged(p),
         );

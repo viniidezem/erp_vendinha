@@ -24,6 +24,7 @@ class _ContaPagarFormScreenState extends ConsumerState<ContaPagarFormScreen> {
   int? _fornecedorId;
   int _parcelas = 1;
   List<DateTime?> _vencimentos = <DateTime?>[];
+  bool _submitAttempted = false;
 
   @override
   void initState() {
@@ -93,6 +94,7 @@ class _ContaPagarFormScreenState extends ConsumerState<ContaPagarFormScreen> {
 
   Future<void> _salvar() async {
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _submitAttempted = true);
 
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
@@ -175,9 +177,12 @@ class _ContaPagarFormScreenState extends ConsumerState<ContaPagarFormScreen> {
                         }
 
                         return InputDecorator(
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Fornecedor',
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
+                            errorText: _submitAttempted && _fornecedorId == null
+                                ? 'Selecione um fornecedor.'
+                                : null,
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<int?>(

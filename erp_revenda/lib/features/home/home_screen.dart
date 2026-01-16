@@ -11,15 +11,6 @@ class HomeScreen extends StatelessWidget {
     return AppPage(
       title: 'ERP Revenda',
       showBack: false,
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 10),
-          child: CircleAvatar(
-            backgroundColor: Colors.white.withValues(alpha: 0.25),
-            child: const Icon(Icons.person, color: Colors.white),
-          ),
-        ),
-      ],
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(

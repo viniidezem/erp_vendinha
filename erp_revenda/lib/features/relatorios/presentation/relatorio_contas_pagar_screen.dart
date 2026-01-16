@@ -6,7 +6,9 @@ import '../../../app/ui/app_colors.dart';
 import '../../financeiro/contas_pagar/data/conta_pagar_model.dart';
 import '../controller/relatorios_controller.dart';
 import '../data/relatorio_models.dart';
+import 'relatorio_exporter.dart';
 import 'relatorio_widgets.dart';
+import '../../settings/controller/app_preferences_controller.dart';
 
 class RelatorioContasPagarScreen extends ConsumerStatefulWidget {
   const RelatorioContasPagarScreen({super.key});
@@ -18,26 +20,105 @@ class RelatorioContasPagarScreen extends ConsumerStatefulWidget {
 
 class _RelatorioContasPagarScreenState
     extends ConsumerState<RelatorioContasPagarScreen> {
+  static const _kInicio = 'relatorio_contas_pagar_inicio';
+  static const _kFim = 'relatorio_contas_pagar_fim';
+  static const _kStatus = 'relatorio_contas_pagar_status';
+  static const _kFornecedor = 'relatorio_contas_pagar_fornecedor';
+  static const _kPeriodoRapido = 'relatorio_contas_pagar_periodo_rapido';
+
   late DateTime _inicio;
   late DateTime _fim;
   String? _status;
   int? _fornecedorId;
+  String? _periodoRapido;
   Future<RelatorioContasPagarResumo>? _future;
   Future<List<ContaPagar>>? _docsFuture;
 
   @override
   void initState() {
     super.initState();
+    _setDefaults();
+    _loadFiltrosSalvos();
+  }
+
+  void _setDefaults() {
     final now = DateTime.now();
     _fim = now;
     _inicio = now.subtract(const Duration(days: 30));
-    _carregar();
+    _status = null;
+    _fornecedorId = null;
+    _periodoRapido = RelatorioPeriodoRapido.ultimos30Dias;
   }
 
   DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
 
   DateTime _endOfDay(DateTime d) =>
       DateTime(d.year, d.month, d.day, 23, 59, 59, 999);
+
+  Future<void> _loadFiltrosSalvos() async {
+    final repo = ref.read(appPreferencesRepositoryProvider);
+    final inicioRaw = await repo.getValue(_kInicio);
+    final fimRaw = await repo.getValue(_kFim);
+    final statusRaw = await repo.getValue(_kStatus);
+    final fornecedorRaw = await repo.getValue(_kFornecedor);
+    final periodoRaw = await repo.getValue(_kPeriodoRapido);
+
+    final inicioMs = int.tryParse(inicioRaw ?? '');
+    final fimMs = int.tryParse(fimRaw ?? '');
+    final fornecedorId = int.tryParse(fornecedorRaw ?? '');
+
+    if (inicioMs != null) {
+      _inicio = DateTime.fromMillisecondsSinceEpoch(inicioMs);
+    }
+    if (fimMs != null) {
+      _fim = DateTime.fromMillisecondsSinceEpoch(fimMs);
+    }
+    _status = (statusRaw ?? '').trim().isEmpty ? null : statusRaw;
+    _fornecedorId = fornecedorId;
+    _periodoRapido =
+        (periodoRaw ?? '').trim().isEmpty ? _periodoRapido : periodoRaw;
+
+    if (!mounted) return;
+    setState(() {});
+    await _carregar();
+  }
+
+  Future<void> _persistFiltros() async {
+    final repo = ref.read(appPreferencesRepositoryProvider);
+    await repo.setValue(_kInicio, _inicio.millisecondsSinceEpoch.toString());
+    await repo.setValue(_kFim, _fim.millisecondsSinceEpoch.toString());
+
+    if (_status == null || _status!.trim().isEmpty) {
+      await repo.removeValue(_kStatus);
+    } else {
+      await repo.setValue(_kStatus, _status!);
+    }
+
+    if (_fornecedorId == null) {
+      await repo.removeValue(_kFornecedor);
+    } else {
+      await repo.setValue(_kFornecedor, _fornecedorId.toString());
+    }
+
+    if (_periodoRapido == null || _periodoRapido!.trim().isEmpty) {
+      await repo.removeValue(_kPeriodoRapido);
+    } else {
+      await repo.setValue(_kPeriodoRapido, _periodoRapido!);
+    }
+  }
+
+  Future<void> _limparFiltros() async {
+    _setDefaults();
+    if (!mounted) return;
+    setState(() {});
+    final repo = ref.read(appPreferencesRepositoryProvider);
+    await repo.removeValue(_kInicio);
+    await repo.removeValue(_kFim);
+    await repo.removeValue(_kStatus);
+    await repo.removeValue(_kFornecedor);
+    await repo.removeValue(_kPeriodoRapido);
+    await _carregar();
+  }
 
   Future<void> _carregar() async {
     final repo = ref.read(relatoriosRepositoryProvider);
@@ -57,6 +138,78 @@ class _RelatorioContasPagarScreenState
         fornecedorId: _fornecedorId,
       );
     });
+    await _persistFiltros();
+  }
+
+  Future<void> _exportRelatorio() async {
+    final repo = ref.read(relatoriosRepositoryProvider);
+    final inicio = _startOfDay(_inicio);
+    final fim = _endOfDay(_fim);
+    final resumo = await repo.contasPagarResumo(
+      inicio: inicio,
+      fim: fim,
+      status: _status,
+      fornecedorId: _fornecedorId,
+    );
+    final docs = await repo.contasPagarDocumentos(
+      inicio: inicio,
+      fim: fim,
+      status: _status,
+      fornecedorId: _fornecedorId,
+    );
+    if (!mounted) return;
+
+    final sections = [
+      RelatorioExportSection(
+        title: 'Totalizadores',
+        headers: const ['Indicador', 'Valor', 'Quantidade'],
+        rows: [
+          ['Aberto', fmtMoney(resumo.totalAberto), resumo.qtdAberta.toString()],
+          ['Pago', fmtMoney(resumo.totalPago), resumo.qtdPaga.toString()],
+          [
+            'Cancelado',
+            fmtMoney(resumo.totalCancelado),
+            resumo.qtdCancelada.toString(),
+          ],
+          ['Vencido', fmtMoney(resumo.totalVencido), resumo.qtdVencida.toString()],
+          [
+            'Vencendo 7d',
+            fmtMoney(resumo.totalVencendo),
+            resumo.qtdVencendo.toString(),
+          ],
+        ],
+      ),
+      RelatorioExportSection(
+        title: 'Documentos',
+        headers: const [
+          'Fornecedor',
+          'Parcela',
+          'Valor',
+          'Status',
+          'Vencimento',
+          'Descricao',
+        ],
+        rows: docs
+            .map(
+              (conta) => [
+                conta.fornecedorNome,
+                '${conta.parcelaNumero}/${conta.parcelasTotal}',
+                fmtMoney(conta.valor),
+                _statusLabel(conta),
+                conta.vencimentoAt == null ? '-' : fmtDate(conta.vencimentoAt!),
+                (conta.descricao ?? '').trim(),
+              ],
+            )
+            .toList(),
+      ),
+    ];
+
+    await RelatorioExporter.export(
+      context,
+      title: 'Relatorio - Contas a pagar',
+      fileBaseName: 'relatorio_contas_pagar',
+      sections: sections,
+    );
   }
 
   Future<void> _pickInicio() async {
@@ -67,7 +220,10 @@ class _RelatorioContasPagarScreenState
       lastDate: DateTime(2100, 1, 1),
     );
     if (picked == null) return;
-    setState(() => _inicio = picked);
+    setState(() {
+      _inicio = picked;
+      _periodoRapido = null;
+    });
     await _carregar();
   }
 
@@ -79,7 +235,33 @@ class _RelatorioContasPagarScreenState
       lastDate: DateTime(2100, 1, 1),
     );
     if (picked == null) return;
-    setState(() => _fim = picked);
+    setState(() {
+      _fim = picked;
+      _periodoRapido = null;
+    });
+    await _carregar();
+  }
+
+  Future<void> _aplicarPeriodoRapido(String periodo) async {
+    final now = DateTime.now();
+    setState(() {
+      _periodoRapido = periodo;
+      switch (periodo) {
+        case RelatorioPeriodoRapido.hoje:
+          _inicio = now;
+          _fim = now;
+          break;
+        case RelatorioPeriodoRapido.ultimos7Dias:
+          _inicio = now.subtract(const Duration(days: 6));
+          _fim = now;
+          break;
+        case RelatorioPeriodoRapido.ultimos30Dias:
+        default:
+          _inicio = now.subtract(const Duration(days: 29));
+          _fim = now;
+          break;
+      }
+    });
     await _carregar();
   }
 
@@ -101,6 +283,12 @@ class _RelatorioContasPagarScreenState
 
     return AppPage(
       title: 'Relatorio - Contas a pagar',
+      actions: [
+        IconButton(
+          onPressed: _exportRelatorio,
+          icon: const Icon(Icons.download_outlined, color: Colors.white),
+        ),
+      ],
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
@@ -125,8 +313,22 @@ class _RelatorioContasPagarScreenState
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          RelatorioQuickPeriodChips(
+            value: _periodoRapido,
+            onChanged: _aplicarPeriodoRapido,
+          ),
           const SizedBox(height: 16),
-          const RelatorioSectionTitle('Filtros'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const RelatorioSectionTitle('Filtros'),
+              TextButton(
+                onPressed: _limparFiltros,
+                child: const Text('Limpar filtros'),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           InputDecorator(
             decoration: const InputDecoration(

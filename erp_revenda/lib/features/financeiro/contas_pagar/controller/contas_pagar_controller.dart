@@ -29,6 +29,12 @@ final contasPagarControllerProvider =
   ContasPagarController.new,
 );
 
+final contasPagarExisteEntradaProvider =
+    FutureProvider.family<bool, int>((ref, entradaId) async {
+      final repo = ref.watch(contasPagarRepositoryProvider);
+      return repo.existeParaEntrada(entradaId);
+    });
+
 class ContasPagarController extends AsyncNotifier<List<ContaPagar>> {
   ContaPagarRepository get _repo => ref.read(contasPagarRepositoryProvider);
 

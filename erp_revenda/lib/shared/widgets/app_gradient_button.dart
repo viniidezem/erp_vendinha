@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../app/ui/app_colors.dart';
 
 class AppGradientButton extends StatelessWidget {
   final String label;
@@ -15,6 +14,7 @@ class AppGradientButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: 52,
       width: double.infinity,
@@ -30,10 +30,10 @@ class AppGradientButton extends StatelessWidget {
         ),
         child: Ink(
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [AppColors.primary, AppColors.primarySoft],
+              colors: [scheme.primary, scheme.secondary],
             ),
             borderRadius: BorderRadius.circular(14),
           ),

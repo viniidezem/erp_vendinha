@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
+import '../../formas_pagamento/controller/formas_pagamento_controller.dart';
+import '../../formas_pagamento/data/forma_pagamento_model.dart';
 import '../controller/vendas_controller.dart';
 import '../data/venda_models.dart';
 
@@ -44,8 +46,14 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
   Widget build(BuildContext context) {
     final vendasAsync = ref.watch(vendasListProvider);
     final statusFiltro = ref.watch(pedidosStatusFiltroProvider);
+    final formasAsync = ref.watch(formasPagamentoControllerProvider);
 
     final statusChips = <String?>[null, ...VendaStatus.filtros];
+    final formas = formasAsync.asData?.value ?? const <FormaPagamento>[];
+    final formasById = {
+      for (final f in formas)
+        if (f.id != null) f.id!: f.nome,
+    };
 
     return AppPage(
       title: 'Pedidos',
@@ -116,8 +124,22 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
                       title: Text(
                         '#${id ?? '-'} • ${v.clienteNome ?? 'Cliente não informado'}',
                       ),
-                      subtitle: Text(
-                        '${VendaStatus.label(v.status)} • Total: R\$ ${v.total.toStringAsFixed(2)}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 2),
+                          Text(
+                            '${VendaStatus.label(v.status)} • Total: R\$ ${v.total.toStringAsFixed(2)}',
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _pagamentoLabel(
+                              formasById,
+                              v.formaPagamentoId,
+                              v.parcelas,
+                            ),
+                          ),
+                        ],
                       ),
                       trailing: Text(_fmtDate(v.createdAt)),
                     );
@@ -130,4 +152,15 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
       ),
     );
   }
+}
+
+String _pagamentoLabel(
+  Map<int, String> formasById,
+  int? formaId,
+  int? parcelas,
+) {
+  if (formaId == null) return 'Pagamento: não informado';
+  final nome = formasById[formaId] ?? 'Forma #$formaId';
+  final qtd = (parcelas ?? 1);
+  return qtd > 1 ? 'Pagamento: $nome (${qtd}x)' : 'Pagamento: $nome';
 }

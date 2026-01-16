@@ -3,33 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/ui/app_colors.dart';
 import '../../../shared/widgets/app_page.dart';
-import '../../vendas/data/venda_models.dart';
 import '../controller/relatorios_controller.dart';
 import '../data/relatorio_models.dart';
 import 'relatorio_exporter.dart';
 import 'relatorio_widgets.dart';
 import '../../settings/controller/app_preferences_controller.dart';
 
-class RelatorioVendasScreen extends ConsumerStatefulWidget {
-  const RelatorioVendasScreen({super.key});
+class RelatorioFluxoCaixaScreen extends ConsumerStatefulWidget {
+  const RelatorioFluxoCaixaScreen({super.key});
 
   @override
-  ConsumerState<RelatorioVendasScreen> createState() =>
-      _RelatorioVendasScreenState();
+  ConsumerState<RelatorioFluxoCaixaScreen> createState() =>
+      _RelatorioFluxoCaixaScreenState();
 }
 
-class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
-  static const _statusEfetivos = '__EFETIVOS__';
-  static const _kInicio = 'relatorio_vendas_inicio';
-  static const _kFim = 'relatorio_vendas_fim';
-  static const _kStatus = 'relatorio_vendas_status';
-  static const _kPeriodoRapido = 'relatorio_vendas_periodo_rapido';
+class _RelatorioFluxoCaixaScreenState
+    extends ConsumerState<RelatorioFluxoCaixaScreen> {
+  static const _kInicio = 'relatorio_fluxo_caixa_inicio';
+  static const _kFim = 'relatorio_fluxo_caixa_fim';
+  static const _kPeriodoRapido = 'relatorio_fluxo_caixa_periodo_rapido';
+  static const _kAgruparMes = 'relatorio_fluxo_caixa_agrupar_mes';
 
   late DateTime _inicio;
   late DateTime _fim;
-  String _statusFiltro = _statusEfetivos;
   String? _periodoRapido;
-  Future<RelatorioVendasResumo>? _future;
+  bool _agruparPorMes = false;
+  Future<RelatorioFluxoCaixaResumo>? _future;
 
   @override
   void initState() {
@@ -43,7 +42,7 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     _fim = now;
     _inicio = now.subtract(const Duration(days: 30));
     _periodoRapido = RelatorioPeriodoRapido.ultimos30Dias;
-    _statusFiltro = _statusEfetivos;
+    _agruparPorMes = false;
   }
 
   DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -55,8 +54,8 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     final repo = ref.read(appPreferencesRepositoryProvider);
     final inicioRaw = await repo.getValue(_kInicio);
     final fimRaw = await repo.getValue(_kFim);
-    final statusRaw = await repo.getValue(_kStatus);
     final periodoRaw = await repo.getValue(_kPeriodoRapido);
+    final agruparRaw = await repo.getValue(_kAgruparMes);
 
     final inicioMs = int.tryParse(inicioRaw ?? '');
     final fimMs = int.tryParse(fimRaw ?? '');
@@ -67,10 +66,9 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     if (fimMs != null) {
       _fim = DateTime.fromMillisecondsSinceEpoch(fimMs);
     }
-    _statusFiltro =
-        (statusRaw ?? '').trim().isEmpty ? _statusEfetivos : statusRaw!;
     _periodoRapido =
         (periodoRaw ?? '').trim().isEmpty ? _periodoRapido : periodoRaw;
+    _agruparPorMes = agruparRaw == '1';
 
     if (!mounted) return;
     setState(() {});
@@ -81,12 +79,7 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     final repo = ref.read(appPreferencesRepositoryProvider);
     await repo.setValue(_kInicio, _inicio.millisecondsSinceEpoch.toString());
     await repo.setValue(_kFim, _fim.millisecondsSinceEpoch.toString());
-
-    if (_statusFiltro.trim().isEmpty) {
-      await repo.removeValue(_kStatus);
-    } else {
-      await repo.setValue(_kStatus, _statusFiltro);
-    }
+    await repo.setValue(_kAgruparMes, _agruparPorMes ? '1' : '0');
 
     if (_periodoRapido == null || _periodoRapido!.trim().isEmpty) {
       await repo.removeValue(_kPeriodoRapido);
@@ -102,81 +95,21 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     final repo = ref.read(appPreferencesRepositoryProvider);
     await repo.removeValue(_kInicio);
     await repo.removeValue(_kFim);
-    await repo.removeValue(_kStatus);
     await repo.removeValue(_kPeriodoRapido);
+    await repo.removeValue(_kAgruparMes);
     await _carregar();
   }
 
   Future<void> _carregar() async {
     final repo = ref.read(relatoriosRepositoryProvider);
-    final somenteEfetivos = _statusFiltro == _statusEfetivos;
-    final status = somenteEfetivos ? null : _statusFiltro;
     setState(() {
-      _future = repo.vendasResumo(
+      _future = repo.fluxoCaixaResumo(
         inicio: _startOfDay(_inicio),
         fim: _endOfDay(_fim),
-        status: status,
-        somenteEfetivos: somenteEfetivos,
+        agruparPorMes: _agruparPorMes,
       );
     });
     await _persistFiltros();
-  }
-
-  Future<void> _exportRelatorio() async {
-    final repo = ref.read(relatoriosRepositoryProvider);
-    final somenteEfetivos = _statusFiltro == _statusEfetivos;
-    final status = somenteEfetivos ? null : _statusFiltro;
-    final resumo = await repo.vendasResumo(
-      inicio: _startOfDay(_inicio),
-      fim: _endOfDay(_fim),
-      status: status,
-      somenteEfetivos: somenteEfetivos,
-    );
-    if (!mounted) return;
-
-    final sections = [
-      RelatorioExportSection(
-        title: 'Totalizadores',
-        headers: const ['Indicador', 'Valor', 'Quantidade'],
-        rows: [
-          [
-            'Total efetivo',
-            fmtMoney(resumo.totalEfetivo),
-            resumo.qtdEfetiva.toString(),
-          ],
-          [
-            'Ticket medio',
-            fmtMoney(resumo.ticketMedio),
-            '',
-          ],
-          [
-            'Cancelado',
-            fmtMoney(resumo.totalCancelado),
-            resumo.qtdCancelada.toString(),
-          ],
-        ],
-      ),
-      RelatorioExportSection(
-        title: 'Por status',
-        headers: const ['Status', 'Quantidade', 'Total'],
-        rows: resumo.porStatus
-            .map(
-              (st) => [
-                VendaStatus.label(st.status),
-                st.qtd.toString(),
-                fmtMoney(st.total),
-              ],
-            )
-            .toList(),
-      ),
-    ];
-
-    await RelatorioExporter.export(
-      context,
-      title: 'Relatorio - Vendas',
-      fileBaseName: 'relatorio_vendas',
-      sections: sections,
-    );
   }
 
   Future<void> _pickInicio() async {
@@ -232,26 +165,76 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
     await _carregar();
   }
 
-  List<String> _statusOptions() {
-    return [VendaStatus.aberta, ...VendaStatus.filtros];
+  String _formatPeriodo(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    if (_agruparPorMes) {
+      return '${two(dt.month)}/${dt.year}';
+    }
+    return fmtDate(dt);
   }
 
-  String _statusLabel(String status) => VendaStatus.label(status);
+  Future<void> _exportRelatorio(RelatorioFluxoCaixaResumo resumo) async {
+    final sections = [
+      RelatorioExportSection(
+        title: 'Totalizadores',
+        headers: const ['Indicador', 'Valor'],
+        rows: [
+          ['Entradas', fmtMoney(resumo.totalEntradas)],
+          ['Saidas', fmtMoney(resumo.totalSaidas)],
+          ['Saldo', fmtMoney(resumo.saldo)],
+        ],
+      ),
+      RelatorioExportSection(
+        title: 'Movimentacao',
+        headers: const ['Periodo', 'Entradas', 'Saidas', 'Saldo'],
+        rows: resumo.itens
+            .map(
+              (item) => [
+                _formatPeriodo(item.data),
+                fmtMoney(item.entradas),
+                fmtMoney(item.saidas),
+                fmtMoney(item.saldo),
+              ],
+            )
+            .toList(),
+      ),
+    ];
+
+    await RelatorioExporter.export(
+      context,
+      title: 'Relatorio - Fluxo de caixa',
+      fileBaseName: 'relatorio_fluxo_caixa',
+      sections: sections,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
-      title: 'Relatorio - Vendas',
+      title: 'Relatorio - Fluxo de caixa',
       actions: [
         IconButton(
-          onPressed: _exportRelatorio,
+          onPressed: () async {
+            final data = await _future;
+            if (data == null) return;
+            await _exportRelatorio(data);
+          },
           icon: const Icon(Icons.download_outlined, color: Colors.white),
         ),
       ],
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          const RelatorioSectionTitle('Periodo'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const RelatorioSectionTitle('Periodo'),
+              TextButton(
+                onPressed: _limparFiltros,
+                child: const Text('Limpar filtros'),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -278,42 +261,31 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
             onChanged: _aplicarPeriodoRapido,
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const RelatorioSectionTitle('Filtros'),
-              TextButton(
-                onPressed: _limparFiltros,
-                child: const Text('Limpar filtros'),
-              ),
-            ],
-          ),
+          const RelatorioSectionTitle('Agrupar por'),
           const SizedBox(height: 10),
           InputDecorator(
             decoration: const InputDecoration(
-              labelText: 'Status',
+              labelText: 'Periodo',
               border: OutlineInputBorder(),
               isDense: true,
             ),
             child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
+              child: DropdownButton<bool>(
                 isExpanded: true,
-                value: _statusFiltro,
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: _statusEfetivos,
-                    child: Text('Efetivos'),
+                value: _agruparPorMes,
+                items: const [
+                  DropdownMenuItem<bool>(
+                    value: false,
+                    child: Text('Dia'),
                   ),
-                  ..._statusOptions().map(
-                    (s) => DropdownMenuItem<String>(
-                      value: s,
-                      child: Text(_statusLabel(s)),
-                    ),
+                  DropdownMenuItem<bool>(
+                    value: true,
+                    child: Text('Mes'),
                   ),
                 ],
                 onChanged: (v) async {
                   if (v == null) return;
-                  setState(() => _statusFiltro = v);
+                  setState(() => _agruparPorMes = v);
                   await _carregar();
                 },
               ),
@@ -322,7 +294,7 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
           const SizedBox(height: 16),
           const RelatorioSectionTitle('Totalizadores'),
           const SizedBox(height: 12),
-          FutureBuilder<RelatorioVendasResumo>(
+          FutureBuilder<RelatorioFluxoCaixaResumo>(
             future: _future,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -331,8 +303,8 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
               if (snapshot.hasError) {
                 return Text('Erro ao carregar relatorio: ${snapshot.error}');
               }
-              final r = snapshot.data;
-              if (r == null) {
+              final resumo = snapshot.data;
+              if (resumo == null) {
                 return const Text('Sem dados para o periodo informado.');
               }
 
@@ -342,66 +314,78 @@ class _RelatorioVendasScreenState extends ConsumerState<RelatorioVendasScreen> {
                     children: [
                       Expanded(
                         child: RelatorioKpiCard(
-                          title: 'Total efetivo',
-                          value: fmtMoney(r.totalEfetivo),
-                          subtitle: '${r.qtdEfetiva} pedidos',
-                          icon: Icons.receipt_long_outlined,
+                          title: 'Entradas',
+                          value: fmtMoney(resumo.totalEntradas),
+                          subtitle: 'Previsto no periodo',
+                          icon: Icons.call_received_outlined,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: RelatorioKpiCard(
-                          title: 'Ticket medio',
-                          value: fmtMoney(r.ticketMedio),
-                          subtitle: 'Media por pedido',
-                          icon: Icons.trending_up_outlined,
+                          title: 'Saidas',
+                          value: fmtMoney(resumo.totalSaidas),
+                          subtitle: 'Previsto no periodo',
+                          icon: Icons.call_made_outlined,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: RelatorioKpiCard(
-                          title: 'Cancelado',
-                          value: fmtMoney(r.totalCancelado),
-                          subtitle: '${r.qtdCancelada} pedidos',
-                          icon: Icons.remove_circle_outline,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(child: SizedBox()),
-                    ],
+                  RelatorioKpiCard(
+                    title: 'Saldo',
+                    value: fmtMoney(resumo.saldo),
+                    subtitle: 'Entradas - saidas',
+                    icon: Icons.account_balance_outlined,
                   ),
-                  const SizedBox(height: 16),
-                  const RelatorioSectionTitle('Por status'),
-                  const SizedBox(height: 10),
-                  if (r.porStatus.isEmpty)
-                    const Text('Sem dados para o periodo informado.')
-                  else
-                    Card(
-                      elevation: 0,
-                      color: AppColors.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: AppColors.border),
-                      ),
-                      child: Column(
-                        children: r.porStatus.map((s) {
-                          return ListTile(
-                            title: Text(_statusLabel(s.status)),
-                            subtitle: Text('${s.qtd} pedido(s)'),
-                            trailing: Text(
-                              fmtMoney(s.total),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          );
-                        }).toList(),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+          const RelatorioSectionTitle('Movimentacao'),
+          const SizedBox(height: 10),
+          FutureBuilder<RelatorioFluxoCaixaResumo>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Text('Erro ao carregar movimentacao: ${snapshot.error}');
+              }
+              final resumo = snapshot.data;
+              final itens = resumo?.itens ?? const [];
+              if (itens.isEmpty) {
+                return const Text('Nenhuma movimentacao encontrada.');
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: itens.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = itens[index];
+                  final saldoColor = item.saldo >= 0
+                      ? AppColors.success
+                      : AppColors.danger;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_formatPeriodo(item.data)),
+                    subtitle: Text(
+                      'Entradas: ${fmtMoney(item.entradas)}  '
+                      'Saidas: ${fmtMoney(item.saidas)}',
+                    ),
+                    trailing: Text(
+                      fmtMoney(item.saldo),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: saldoColor,
                       ),
                     ),
-                ],
+                  );
+                },
               );
             },
           ),

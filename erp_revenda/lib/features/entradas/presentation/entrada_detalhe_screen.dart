@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
+import '../../financeiro/contas_pagar/controller/contas_pagar_controller.dart';
 import '../controller/entradas_controller.dart';
 import '../data/entrada_models.dart';
 
@@ -30,6 +31,9 @@ class EntradaDetalheScreen extends ConsumerWidget {
         data: (detalhe) {
           final e = detalhe.entrada;
           final itens = detalhe.itens;
+          final hasFinanceiroAsync = ref.watch(
+            contasPagarExisteEntradaProvider(entradaId),
+          );
           final subtotal = itens.fold<double>(0, (s, it) => s + it.subtotal);
           final total = e.totalNota.toStringAsFixed(2);
 
@@ -153,15 +157,37 @@ class EntradaDetalheScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: e.status == EntradaStatus.confirmada
-                    ? () => context.push('/entradas/$entradaId/contas-pagar')
-                    : null,
-                icon: const Icon(Icons.payments_outlined),
-                label: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Gerar contas a pagar'),
-                ),
+              hasFinanceiroAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (err, _) => Text('Erro ao checar financeiro: $err'),
+                data: (hasFinanceiro) {
+                  final podeGerar =
+                      e.status == EntradaStatus.confirmada && !hasFinanceiro;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: podeGerar
+                            ? () => context.push(
+                                  '/entradas/$entradaId/contas-pagar',
+                                )
+                            : null,
+                        icon: const Icon(Icons.payments_outlined),
+                        label: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Gerar contas a pagar'),
+                        ),
+                      ),
+                      if (hasFinanceiro)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Financeiro ja gerado para esta entrada.',
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ],
           );

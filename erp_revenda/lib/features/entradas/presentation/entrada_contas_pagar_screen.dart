@@ -24,11 +24,21 @@ class _EntradaContasPagarScreenState
   int _parcelas = 1;
   List<DateTime?> _vencimentos = <DateTime?>[];
   bool _init = false;
+  bool _refreshed = false;
 
   @override
   void initState() {
     super.initState();
     _syncVencimentos(_parcelas);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_refreshed) return;
+    _refreshed = true;
+    ref.invalidate(entradaDetalheProvider(widget.entradaId));
+    ref.invalidate(contasPagarExisteEntradaProvider(widget.entradaId));
   }
 
   @override
@@ -124,6 +134,9 @@ class _EntradaContasPagarScreenState
   @override
   Widget build(BuildContext context) {
     final detalheAsync = ref.watch(entradaDetalheProvider(widget.entradaId));
+    final hasFinanceiroAsync = ref.watch(
+      contasPagarExisteEntradaProvider(widget.entradaId),
+    );
     final total = _parseTotal();
     final parcelasValores = _parcelasValores(total, _parcelas);
 
@@ -146,6 +159,24 @@ class _EntradaContasPagarScreenState
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              hasFinanceiroAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (e, _) => Text('Erro ao checar financeiro: $e'),
+                data: (hasFinanceiro) {
+                  if (!hasFinanceiro) return const SizedBox.shrink();
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'Financeiro ja gerado para esta entrada.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              if (hasFinanceiroAsync.value == true)
+                const SizedBox(height: 12),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -246,7 +277,8 @@ class _EntradaContasPagarScreenState
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: entrada.status == EntradaStatus.confirmada
+                onPressed: entrada.status == EntradaStatus.confirmada &&
+                        hasFinanceiroAsync.value != true
                     ? () => _gerarContas(entrada)
                     : null,
                 icon: const Icon(Icons.check_circle_outline),

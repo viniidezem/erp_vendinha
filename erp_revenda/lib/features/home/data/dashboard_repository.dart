@@ -10,8 +10,48 @@ class DashboardRepository {
   final AppDatabase _db;
   DashboardRepository(this._db);
 
-  Future<DashboardResumo> carregarResumo() async {
+  DateTime _startOfDay(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  DateTime _endOfDay(DateTime d) =>
+      DateTime(d.year, d.month, d.day, 23, 59, 59, 999);
+
+  Future<DashboardResumo> carregarResumo({
+    required String periodoVendas,
+  }) async {
     final Database db = await _db.database;
+    final now = DateTime.now();
+
+    DateTime periodoInicio;
+    DateTime periodoFim;
+    switch (periodoVendas) {
+      case DashboardResumoPeriodo.ultimos7Dias:
+        periodoInicio = _startOfDay(now.subtract(const Duration(days: 6)));
+        periodoFim = _endOfDay(now);
+        break;
+      case DashboardResumoPeriodo.ultimos30Dias:
+        periodoInicio = _startOfDay(now.subtract(const Duration(days: 29)));
+        periodoFim = _endOfDay(now);
+        break;
+      case DashboardResumoPeriodo.hoje:
+      default:
+        periodoInicio = _startOfDay(now);
+        periodoFim = _endOfDay(now);
+        break;
+    }
+    final periodoRows = await db.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(total), 0) AS total,
+        COUNT(*) AS qtd
+      FROM vendas
+      WHERE created_at BETWEEN ? AND ?
+        AND status NOT IN ('ABERTA', 'CANCELADA');
+    ''',
+      [periodoInicio.millisecondsSinceEpoch, periodoFim.millisecondsSinceEpoch],
+    );
+    final vendasPeriodoTotal =
+        (periodoRows.first['total'] as num? ?? 0).toDouble();
+    final vendasPeriodoQtde = (periodoRows.first['qtd'] as int? ?? 0);
 
     // Vendas: hoje (timezone local)
     final vendasHojeRows = await db.rawQuery('''
@@ -75,7 +115,41 @@ class DashboardRepository {
     );
     final pedidosAguardandoPagamento = (aguardandoPagtoRows.first['qtd'] as int? ?? 0);
 
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final vencendoMs =
+        DateTime.now().add(const Duration(days: 7)).millisecondsSinceEpoch;
+
+    final contasReceberRows = await db.rawQuery(
+      '''
+      SELECT
+        SUM(CASE WHEN status = 'ABERTA' AND vencimento_at IS NOT NULL AND vencimento_at < ? THEN 1 ELSE 0 END) AS vencidas,
+        SUM(CASE WHEN status = 'ABERTA' AND vencimento_at IS NOT NULL AND vencimento_at >= ? AND vencimento_at <= ? THEN 1 ELSE 0 END) AS vencendo
+      FROM contas_receber
+    ''',
+      [nowMs, nowMs, vencendoMs],
+    );
+    final contasReceberVencidas =
+        (contasReceberRows.first['vencidas'] as num? ?? 0).toInt();
+    final contasReceberVencendo =
+        (contasReceberRows.first['vencendo'] as num? ?? 0).toInt();
+
+    final contasPagarRows = await db.rawQuery(
+      '''
+      SELECT
+        SUM(CASE WHEN status = 'ABERTA' AND vencimento_at IS NOT NULL AND vencimento_at < ? THEN 1 ELSE 0 END) AS vencidas,
+        SUM(CASE WHEN status = 'ABERTA' AND vencimento_at IS NOT NULL AND vencimento_at >= ? AND vencimento_at <= ? THEN 1 ELSE 0 END) AS vencendo
+      FROM contas_pagar
+    ''',
+      [nowMs, nowMs, vencendoMs],
+    );
+    final contasPagarVencidas =
+        (contasPagarRows.first['vencidas'] as num? ?? 0).toInt();
+    final contasPagarVencendo =
+        (contasPagarRows.first['vencendo'] as num? ?? 0).toInt();
+
     return DashboardResumo(
+      vendasPeriodoTotal: vendasPeriodoTotal,
+      vendasPeriodoQtde: vendasPeriodoQtde,
       vendasHojeTotal: vendasHojeTotal,
       vendasHojeQtde: vendasHojeQtde,
       vendasMesTotal: vendasMesTotal,
@@ -85,6 +159,10 @@ class DashboardRepository {
       produtosComSaldo: produtosComSaldo,
       pedidosAbertos: pedidosAbertos,
       pedidosAguardandoPagamento: pedidosAguardandoPagamento,
+      contasReceberVencidas: contasReceberVencidas,
+      contasReceberVencendo: contasReceberVencendo,
+      contasPagarVencidas: contasPagarVencidas,
+      contasPagarVencendo: contasPagarVencendo,
     );
   }
 

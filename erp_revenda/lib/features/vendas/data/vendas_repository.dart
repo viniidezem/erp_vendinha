@@ -421,6 +421,37 @@ class VendasRepository {
     });
   }
 
+  Future<void> marcarPagamentoEfetuadoSePossivel(int vendaId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'vendas',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [vendaId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final status = rows.first['status'] as String?;
+      if (status == null) return;
+      final podeAtualizar =
+          status == VendaStatus.pedido || status == VendaStatus.aguardandoPagamento;
+      if (!podeAtualizar) return;
+
+      await txn.update(
+        'vendas',
+        {'status': VendaStatus.pagamentoEfetuado},
+        where: 'id = ?',
+        whereArgs: [vendaId],
+      );
+      await _insertStatusLog(
+        txn,
+        vendaId: vendaId,
+        status: VendaStatus.pagamentoEfetuado,
+      );
+    });
+  }
+
   Future<void> _insertStatusLog(
     dynamic txn, {
     required int vendaId,

@@ -103,3 +103,31 @@ class RelatorioProdutosResumo {
     required this.porValor,
   });
 }
+
+class RelatorioFluxoCaixaItem {
+  final DateTime data;
+  final double entradas;
+  final double saidas;
+  final double saldo;
+
+  const RelatorioFluxoCaixaItem({
+    required this.data,
+    required this.entradas,
+    required this.saidas,
+    required this.saldo,
+  });
+}
+
+class RelatorioFluxoCaixaResumo {
+  final double totalEntradas;
+  final double totalSaidas;
+  final double saldo;
+  final List<RelatorioFluxoCaixaItem> itens;
+
+  const RelatorioFluxoCaixaResumo({
+    required this.totalEntradas,
+    required this.totalSaidas,
+    required this.saldo,
+    required this.itens,
+  });
+}
