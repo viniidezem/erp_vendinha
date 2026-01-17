@@ -7,6 +7,7 @@ import 'dashboard_settings.dart';
 import 'app_preferences.dart';
 import '../../../app/ui/app_colors.dart';
 import 'pin_settings.dart';
+import '../../../shared/plan/app_plan.dart';
 
 class AppSettingsRepository {
   final AppDatabase _db;
@@ -145,6 +146,15 @@ class AppSettingsRepository {
     );
   }
 
+  Future<AppPlan> carregarPlano() async {
+    final id = await getValue(_kAppPlan);
+    return AppPlan.fromId(id);
+  }
+
+  Future<void> salvarPlano(AppPlan plan) async {
+    await setValue(_kAppPlan, plan.id);
+  }
+
   Future<BackupInfo?> carregarBackupInfo() async {
     final name = await getValue(_kBackupLastName);
     final at = await getValue(_kBackupLastAt);
@@ -226,6 +236,7 @@ class AppSettingsRepository {
   static const String _kPinAnswerHash = 'pin_answer_hash';
   static const String _kPinLockOnBackground = 'pin_lock_on_background';
   static const String _kPinTimeoutMinutes = 'pin_timeout_minutes';
+  static const String _kAppPlan = AppPlan.settingsKey;
 }
 
 String? _normalize(String? v) {

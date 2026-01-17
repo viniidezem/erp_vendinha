@@ -5,6 +5,7 @@ import '../data/cliente_model.dart';
 import '../data/cliente_repository.dart';
 import '../data/cliente_endereco_model.dart';
 import '../data/cliente_endereco_repository.dart';
+import '../../settings/controller/plan_controller.dart';
 
 // Mantém este provider aqui para não quebrar Produtos/Vendas
 final appDatabaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
@@ -72,6 +73,7 @@ class ClientesController extends AsyncNotifier<List<Cliente>> {
       ),
     );
     await refresh();
+    ref.invalidate(planInfoProvider);
   }
 
   Future<void> editar(Cliente clienteAtualizado) async {

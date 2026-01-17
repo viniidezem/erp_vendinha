@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../../data/db/app_database.dart';
 import '../../produtos/data/produto_model.dart';
 import 'kit_models.dart';
+import '../../../shared/plan/app_plan.dart';
 
 class KitRepository {
   final AppDatabase _db;
@@ -83,6 +84,15 @@ class KitRepository {
     final db = await _db.database;
     if (itens.isEmpty) {
       throw ArgumentError('Adicione pelo menos um produto ao kit.');
+    }
+    if (kitId == null) {
+      final plan = await carregarAppPlan(db);
+      await validarLimitePlano(
+        db,
+        max: plan.maxProdutos,
+        table: 'produtos',
+        label: 'produtos',
+      );
     }
 
     return db.transaction<int>((txn) async {

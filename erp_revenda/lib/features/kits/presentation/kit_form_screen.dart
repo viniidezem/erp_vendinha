@@ -7,6 +7,7 @@ import '../../../shared/number_parser.dart';
 import '../../../shared/widgets/app_decimal_field.dart';
 import '../../../shared/widgets/app_error_dialog.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../settings/controller/plan_controller.dart';
 import '../controller/kits_controller.dart';
 import '../data/kit_models.dart';
 
@@ -128,6 +129,7 @@ class _KitFormScreenState extends ConsumerState<KitFormScreen> {
             itens: _itens,
           );
       await ref.read(kitsControllerProvider.notifier).refresh();
+      ref.invalidate(planInfoProvider);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {

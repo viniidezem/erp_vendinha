@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../../../data/db/app_database.dart';
 import 'cliente_model.dart';
+import '../../../shared/plan/app_plan.dart';
 
 class ClienteRepository {
   final AppDatabase _db;
@@ -43,6 +44,13 @@ class ClienteRepository {
 
   Future<int> inserir(Cliente cliente) async {
     final db = await _db.database;
+    final plan = await carregarAppPlan(db);
+    await validarLimitePlano(
+      db,
+      max: plan.maxClientes,
+      table: 'clientes',
+      label: 'clientes',
+    );
     return db.insert('clientes', cliente.toMap());
   }
 

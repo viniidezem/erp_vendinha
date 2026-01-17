@@ -2,6 +2,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../../../data/db/app_database.dart';
 import 'produto_model.dart';
+import '../../../shared/plan/app_plan.dart';
 
 class ProdutoRepository {
   final AppDatabase _db;
@@ -100,6 +101,13 @@ class ProdutoRepository {
 
   Future<int> inserir(Produto p, {List<int> propriedadesIds = const []}) async {
     final db = await _db.database;
+    final plan = await carregarAppPlan(db);
+    await validarLimitePlano(
+      db,
+      max: plan.maxProdutos,
+      table: 'produtos',
+      label: 'produtos',
+    );
 
     return db.transaction<int>((txn) async {
       final id = await txn.insert('produtos', p.toMap());

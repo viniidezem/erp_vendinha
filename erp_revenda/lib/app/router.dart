@@ -30,6 +30,7 @@ import '../features/settings/presentation/backup_screen.dart';
 import '../features/settings/presentation/metas_screen.dart';
 import '../features/settings/presentation/appearance_screen.dart';
 import '../features/settings/presentation/pin_settings_screen.dart';
+import '../features/settings/presentation/plan_screen.dart';
 import '../features/relatorios/presentation/relatorios_screen.dart';
 import '../features/relatorios/presentation/relatorio_contas_pagar_screen.dart';
 import '../features/relatorios/presentation/relatorio_contas_receber_screen.dart';
@@ -199,6 +200,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/aparencia',
         builder: (context, state) => const AppearanceScreen(),
+      ),
+      GoRoute(
+        path: '/settings/plano',
+        builder: (context, state) => const PlanScreen(),
       ),
 
       // Relatorios

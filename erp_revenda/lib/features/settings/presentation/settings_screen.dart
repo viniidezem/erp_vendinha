@@ -43,6 +43,13 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _SettingTile(
+            icon: Icons.workspace_premium_outlined,
+            title: 'Plano',
+            subtitle: 'Limites e upgrade',
+            onTap: () => context.push('/settings/plano'),
+          ),
+          const SizedBox(height: 10),
+          _SettingTile(
             icon: Icons.info_outline,
             title: 'Sobre',
             subtitle: 'Versão do app e suporte',

@@ -10,6 +10,7 @@ import '../../fornecedores/data/fornecedor_model.dart';
 import '../../fornecedores/data/fornecedor_repository.dart';
 import '../data/produto_model.dart';
 import '../data/produto_repository.dart';
+import '../../settings/controller/plan_controller.dart';
 
 final produtoRepositoryProvider = Provider<ProdutoRepository>((ref) {
   return ProdutoRepository(ref.watch(appDatabaseProvider));
@@ -56,6 +57,7 @@ class ProdutosController extends AsyncNotifier<List<Produto>> {
   Future<void> adicionar(Produto p, {List<int> propriedadesIds = const []}) async {
     await _repo.inserir(p, propriedadesIds: propriedadesIds);
     await refresh();
+    ref.invalidate(planInfoProvider);
   }
 
   Future<void> editar(Produto p, {List<int> propriedadesIds = const []}) async {

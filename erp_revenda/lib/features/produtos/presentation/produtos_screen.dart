@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/plan/plan_limit_banner.dart';
 import '../controller/produtos_controller.dart';
+import '../../settings/controller/plan_controller.dart';
 
 class ProdutosScreen extends ConsumerStatefulWidget {
   const ProdutosScreen({super.key});
@@ -46,6 +48,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     final onlyActive = ref.watch(produtosSomenteAtivosProvider);
     final onlyStock = ref.watch(produtosSomenteComSaldoProvider);
     final asyncProdutos = ref.watch(produtosControllerProvider);
+    final planAsync = ref.watch(planInfoProvider);
 
     return AppPage(
       title: 'Produtos',
@@ -107,6 +110,23 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            planAsync.when(
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (info) {
+                final max = info.maxProdutos;
+                if (info.isPro || max == null || !info.nearProdutos()) {
+                  return const SizedBox.shrink();
+                }
+                return PlanLimitBanner(
+                  label: 'produtos',
+                  used: info.produtos,
+                  max: max,
+                  onTap: () => context.push('/settings/plano'),
+                );
+              },
             ),
             const SizedBox(height: 12),
             Expanded(

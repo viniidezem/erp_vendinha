@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_page.dart';
 import '../../clientes/controller/clientes_controller.dart';
 import '../../formas_pagamento/controller/formas_pagamento_controller.dart';
 import '../../formas_pagamento/data/forma_pagamento_model.dart';
+import '../../settings/controller/plan_controller.dart';
 import '../controller/vendas_controller.dart';
 import '../data/venda_models.dart';
 
@@ -224,6 +225,7 @@ class _CheckoutPedidoScreenState extends ConsumerState<CheckoutPedidoScreen> {
 
     // Atualiza lista
     await ref.read(vendasListProvider.notifier).refresh();
+    ref.invalidate(planInfoProvider);
     if (!mounted) return;
 
     toast('Pedido registrado com sucesso.');

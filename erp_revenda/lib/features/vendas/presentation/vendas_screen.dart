@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/plan/plan_limit_banner.dart';
 import '../../formas_pagamento/controller/formas_pagamento_controller.dart';
 import '../../formas_pagamento/data/forma_pagamento_model.dart';
 import '../controller/vendas_controller.dart';
 import '../data/venda_models.dart';
+import '../../settings/controller/plan_controller.dart';
 
 class VendasScreen extends ConsumerStatefulWidget {
   final bool showBack;
@@ -47,6 +49,7 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
     final vendasAsync = ref.watch(vendasListProvider);
     final statusFiltro = ref.watch(pedidosStatusFiltroProvider);
     final formasAsync = ref.watch(formasPagamentoControllerProvider);
+    final planAsync = ref.watch(planInfoProvider);
 
     final statusChips = <String?>[null, ...VendaStatus.filtros];
     final formas = formasAsync.asData?.value ?? const <FormaPagamento>[];
@@ -99,6 +102,25 @@ class _VendasScreenState extends ConsumerState<VendasScreen> {
             ),
           ),
           const SizedBox(height: 8),
+          planAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (info) {
+              final max = info.maxVendas;
+              if (info.isPro || max == null || !info.nearVendas()) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: PlanLimitBanner(
+                  label: 'vendas',
+                  used: info.vendas,
+                  max: max,
+                  onTap: () => context.push('/settings/plano'),
+                ),
+              );
+            },
+          ),
           Expanded(
             child: vendasAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),

@@ -2,6 +2,7 @@ import '../../../data/db/app_database.dart';
 import '../../produtos/data/produto_model.dart';
 import '../../produtos/data/produto_repository.dart';
 import 'venda_models.dart';
+import '../../../shared/plan/app_plan.dart';
 
 class VendasRepository {
   final AppDatabase _db;
@@ -103,6 +104,17 @@ class VendasRepository {
     String? observacao,
   }) async {
     final db = await _db.database;
+    if (vendaId == null && status != VendaStatus.aberta) {
+      final plan = await carregarAppPlan(db);
+      await validarLimitePlano(
+        db,
+        max: plan.maxVendas,
+        table: 'vendas',
+        label: 'vendas',
+        where: 'status <> ?',
+        whereArgs: [VendaStatus.aberta],
+      );
+    }
 
     // Regra de negocio: nao permitir finalizar venda sem cliente.
     if (status != VendaStatus.aberta && vendaId == null && clienteId == null) {

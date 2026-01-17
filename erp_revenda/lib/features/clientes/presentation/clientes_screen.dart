@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/ui/app_colors.dart';
+import '../../../shared/plan/plan_limit_banner.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../controller/clientes_controller.dart';
+import '../../settings/controller/plan_controller.dart';
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -70,6 +72,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   Widget build(BuildContext context) {
     final onlyActive = ref.watch(clientesSomenteAtivosProvider);
     final asyncClientes = ref.watch(clientesControllerProvider);
+    final planAsync = ref.watch(planInfoProvider);
 
     return AppPage(
       title: 'Clientes',
@@ -123,6 +126,23 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            planAsync.when(
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (info) {
+                final max = info.maxClientes;
+                if (info.isPro || max == null || !info.nearClientes()) {
+                  return const SizedBox.shrink();
+                }
+                return PlanLimitBanner(
+                  label: 'clientes',
+                  used: info.clientes,
+                  max: max,
+                  onTap: () => context.push('/settings/plano'),
+                );
+              },
             ),
             const SizedBox(height: 12),
             Expanded(
